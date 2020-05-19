@@ -33,7 +33,7 @@ final class AtomicSheetTests: XCTestCase {
 	let personsData = (0..<300).map { _ in Person.random() }
 	let header = [ "DOB", "ID", "Email", "Name" ]
 	
-	let testSheet = "AtomicSheetTest"
+	let testSheet = "CBC Parents Form"//"AtomicSheetTest"
 	
 	var sheet: AtomicSheet<GoogleServiceAccount>!
 	let auth = AuthenticationTests()
@@ -43,58 +43,55 @@ final class AtomicSheetTests: XCTestCase {
 			try? auth.loadAuth()
 		}
 		if sheet == nil {
-			sheet = .init(spreadsheetId: testSpreadsheetId,
-							sheetTitle: testSheet,
-							using: auth.acc!,
-							syncInterval: .seconds(5),
-							delegate: self)
+			sheet = .init(spreadsheetId: testSpreadsheetId, sheetTitle: testSheet, using: auth.acc!, delegate: self)
 		}
 	}
 	func testLoadSheet () {
 		loadSheetIfRequired()
-		XCTAssertNoThrow(_ = try await (sheet.get(timeout: 20)))
+		XCTAssertNoThrow(_ = try await (sheet.get().then(on: .global()) { print($0) } ))
 	}
 	func testWriteHeader () {
 		loadSheetIfRequired()
-		sheet.operate(.set(.row(0), [ header ]))
-		
-		while sheet.operationQueue.syncPointee.count > 0 {
-			usleep(100*1000)
+		sheet.operate {
+			try $0.clear()
+			try $0.set(rows: [self.header], at: .row(0))
 		}
+		waitAndMatch(rows: [header])
 	}
 	func testManyAppend () {
 		loadSheetIfRequired()
 		
 		var rows = [header]
+		rows += personsData.map { $0.row() }
 		
-		sheet.operate(.clear)
-		sheet.operate(.set(.row(0), [ header ]))
-		
-		for person in personsData {
-			sheet.operate(.appendRows([person.row()]))
-			rows.append(person.row())
+		sheet.operate {
+			try $0.clear()
+			try $0.set(rows: [self.header], at: .row(0))
+			
+			for person in self.personsData {
+				try $0.append(rows: [person.row()])
+			}
 		}
 		waitAndMatch(rows: rows)
 	}
 	func testManyAppendAndInsert () {
 		loadSheetIfRequired()
-		//sheet.replaceSheetForEfficiency = false
 		
-		sheet.operate(.clear)
-		sheet.operate(.set(.row(0), [ header ]))
-		
+		sheet.operate {
+			try $0.clear()
+			try $0.set(rows: [self.header], at: .row(0))
+		}
 		DispatchQueue.concurrentPerform(iterations: personsData.count, execute: { i in
 			let person = self.personsData[i]
-			sheet.operate(using: { rows in
-				let index = rows.suffix(from: 1).binarySearch(where: {$0[2] > person.email ? 1 : -1})
-				if index < rows.count {
-					//print ( "\(rows.suffix(from: 1)[index][2]), \(person.email), \(rows.map {$0[2]} )" )
-					let tIndex = max(0, index)
-					return [ .insert(.rows, tIndex..<(tIndex+1)), .set(.row(tIndex), [person.row()]) ]
+			sheet.operate(using: { sheet in
+				let actual = sheet.data.suffix(from: 1)
+				let index = actual.binarySearch(comparing: {$0[1]}, with: person.email)
+				if actual.indices.contains(index) {
+					try sheet.insert(dimension: .rows, range: index..<(index+1))
+					try sheet.set(rows: [person.row()], at: .row(index))
 				} else {
-					return [ .appendRows([person.row()]) ]
+					try sheet.append(rows: [person.row()])
 				}
-				
 			})
 		})
 		var rows = [header]
@@ -103,19 +100,13 @@ final class AtomicSheetTests: XCTestCase {
 	}
 	func testManyDelete () {
 		testManyAppendAndInsert()
-		//sheet.replaceSheetForEfficiency = false
 		
 		let personCountToDelete = personsData.count/3
 		DispatchQueue.concurrentPerform(iterations: personCountToDelete, execute: { i in
 			let person = self.personsData[i]
-			sheet.operate(using: { rows in
-				let index = rows.suffix(from: 1).binarySearch(where: {
-					if $0[2] == person.email {
-						return 0
-					}
-					return $0[2] > person.email ? 1 : -1
-				})
-				return [ .delete(.rows, index..<(index+1)) ]
+			sheet.operate(using: { sheet in
+				let index = sheet.data.suffix(from: 1).binarySearch(comparing: {$0[1]}, with: person.email)
+				try sheet.delete(dimension: .rows, range: index..<(index+1))
 			})
 		})
 		
@@ -126,55 +117,35 @@ final class AtomicSheetTests: XCTestCase {
 		waitAndMatch(rows: rows)
 	}
 	func waitAndMatch (rows: [[String]]) {
-		while !sheet.isSheetLoaded || sheet.operationQueue.syncPointee.count > 0 {
+		while try! await(sheet.operationsLeft()) > 0 {
 			usleep(100*1000)
 		}
 		
 		XCTAssertNoThrow(
-			try await(try sheet.spreadsheet.read(sheet: testSheet)
-			.then(on: .global()) {
-				XCTAssertEqual(rows.count, $0.values!.count)
-				for i in rows.indices {
-					XCTAssertEqual(rows[i], $0.values?[i])
+			try await(
+				try sheet.read(sheet: testSheet)
+				.then(on: .global()) {
+					XCTAssertEqual(rows.count, $0.values!.count)
+					for i in rows.indices {
+						XCTAssertEqual(rows[i], $0.values?[i])
+					}
 				}
-			})
+			)
 		)
 	}
 }
 
 extension AtomicSheetTests: AtomicSheetDelegate {
-	
-	func uploadWillBegin(_ operations: [SheetOperation]) {
+	func operationDidFail(_ sheet: String, operation: Sheet.Operation, error: Error) {
+		
+	}
+	func uploadWillBegin(_ sheet: String, operations: [Sheet.Operation]) {
 		print ("will upload \(operations.count) operations")
 	}
-	func uploadDidSucceed(_ operations: [SheetOperation]) {
+	func uploadDidSucceed(_ sheet: String, operations: [Sheet.Operation]) {
 		print ("uploaded successfully \(operations.count) operations")
 	}
-	func uploadDidFail(_ operations: [SheetOperation], error: Error) {
+	func uploadDidFail(_ sheet: String, operations: [Sheet.Operation], error: Error) {
 		print ("failed \(operations.count) operations, error: \(error)")
-	}
-	
-}
-extension Collection {
-    /// Finds such index N that predicate is true for all elements up to
-    /// but not including the index N, and is false for all elements
-    /// starting with index N.
-    /// Behavior is undefined if there is no such N.
-    func binarySearch(where predicate: (Element) -> Int) -> Index {
-        var low = startIndex
-        var high = endIndex
-        while low != high {
-            let mid = index(low, offsetBy: distance(from: low, to: high)/2)
-			let r = predicate(self[mid])
-            if r < 0 {
-                low = index(after: mid)
-            } else if r > 0 {
-                high = mid
-			} else {
-				low = mid
-				break
-			}
-        }
-		return low
-    }
+	}	
 }

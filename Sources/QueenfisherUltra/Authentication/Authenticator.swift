@@ -34,7 +34,7 @@ public struct GoogleAPIKey: Codable, Authenticator {
 	/// Date after which the token will be invalid
 	internal(set) public var expiresIn: Date
 	/// Check if the API Key has expired
-	public var isExpired: Bool { Date ().timeIntervalSince(expiresIn) < 0 }
+	public var isExpired: Bool { Date ().timeIntervalSince(expiresIn) > 0 }
 	
 	public func authenticate(scope: GoogleScope) throws -> Promise<GoogleAPIKey> {
 		if isExpired {

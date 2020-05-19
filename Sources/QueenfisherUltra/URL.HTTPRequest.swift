@@ -56,8 +56,15 @@ public extension URL {
 				let object = try decoder.decode(O.self, from: data)
 				return object
 			} catch {
-				let object = try decoder.decode(E.self, from: data)
-				throw object
+				print (error)
+				let err: E
+				do {
+					err = try decoder.decode(E.self, from: data)
+				} catch {
+					print (String(data: data, encoding: .utf8)!)
+					throw error
+				}
+				throw err
 			}
 		}
 	}

@@ -7,18 +7,13 @@
 
 import Foundation
 
-public extension Spreadsheet {
+public extension Sheet {
 	
 	struct WriteResponse: Codable {
 		let updatedRange: String
 		let updatedRows: Int
 		let updatedColumns: Int
 	}
-	
-	struct Properties: Codable {
-		let title: String
-	}
-	
 	struct ErrorResponse: Codable, Error {
 		struct Error: Codable {
 			let code: Int

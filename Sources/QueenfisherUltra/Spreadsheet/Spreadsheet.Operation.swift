@@ -7,7 +7,7 @@
 
 import Foundation
 
-public extension Spreadsheet {
+public extension Sheet {
 	
 	struct Operation: Codable {
 		
@@ -23,27 +23,8 @@ public extension Spreadsheet {
 			var range: Range
 			var fields: String? = nil
 		}
-		public struct AddData: Codable {
-			public struct Properties: Codable {
-				let title: String
-				let sheetId: Int?
-				let gridProperties: Sheet.Properties.Grid?
-			}
-			let properties: Properties
-		}
-		
-		public struct CellData: Codable {
-			public struct ExtendedValue: Codable {
-				let stringValue: String
-			}
-			let userEnteredValue: ExtendedValue
-		}
-		public struct RowData: Codable {
-			let values: [CellData]
-			
-			static func from (rows: [[String]]) -> [RowData] {
-				rows.map { .init(values: $0.map { .init(userEnteredValue: .init(stringValue: $0) ) }) }
-			}
+		public struct AddSheetRequest: Codable {
+			let properties: Sheet.Properties?
 		}
 		public struct AppendCellsRequest: Codable {
 			let sheetId: Int
@@ -62,13 +43,24 @@ public extension Spreadsheet {
 			let start: GridCoordinate?
 			let range: Data.Range?
 		}
+		public struct MoveCellsRequest: Codable {
+			public struct Source: Codable {
+				let sheetId: Int
+				let dimension: Sheet.Dimension
+				let startIndex: Int
+				let endIndex: Int
+			}
+			let source: Source
+			let destinationIndex: Int
+		}
 		
+		public var load: Bool? = nil
 		var deleteDimension: Data? = nil
 		var appendDimension: Data.Range? = nil
 		var insertDimension: Data? = nil
-		var moveDimension: Data? = nil
 		var deleteSheet: Data.Range? = nil
-		var addSheet: AddData? = nil
+		var moveDimension: MoveCellsRequest? = nil
+		var addSheet: AddSheetRequest? = nil
 		var updateCells: UpdateCellsRequest? = nil
 		var appendCells: AppendCellsRequest? = nil
 	}
@@ -84,17 +76,21 @@ public extension Spreadsheet {
 	}
 	
 }
-public extension Spreadsheet.Operation {
+public extension Sheet.Operation {
 	
-	static func updateCells (sheetId: Int, rows: [[String]], start: Sheet.Location) -> Spreadsheet.Operation {
-		.init(updateCells: .init(rows: RowData.from(rows: rows),
+	internal static func load () -> Sheet.Operation {
+		.init(load: true)
+	}
+	
+	static func updateCells (sheetId: Int, rows: [[String]], start: Sheet.Location) -> Sheet.Operation {
+		.init(updateCells: .init(rows: .init(from: rows),
 								 fields: "userEnteredValue",
 								 start: .init(sheetId: sheetId,
 											  rowIndex: start.row,
 											  columnIndex: start.col),
 								 range: nil))
 	}
-	static func clear (sheetId: Int) -> Spreadsheet.Operation {
+	static func clear (sheetId: Int) -> Sheet.Operation {
 		.init(updateCells: .init(rows: nil, fields: "userEnteredValue",
 								 start: nil,
 								 range: .init(sheetId: sheetId,
@@ -103,41 +99,53 @@ public extension Spreadsheet.Operation {
 											  startIndex: nil,
 											  endIndex: nil)))
 	}
-	static func appendCells (sheetId: Int, rows: [[String]]) -> Spreadsheet.Operation {
+	static func appendCells (sheetId: Int, rows: [[String]]) -> Sheet.Operation {
 		.init(appendCells: .init(sheetId: sheetId,
-								 rows: RowData.from(rows: rows),
+								 rows: .init(from: rows),
 								 fields: "userEnteredValue"))
 	}
-	static func insert (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Spreadsheet.Operation {
+	static func insert (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Sheet.Operation {
 		.init(insertDimension: .init(range: .init(sheetId: sheetId,
 												  dimension: dimension,
 												  length: nil,
 												  startIndex: range.lowerBound,
 												  endIndex: range.upperBound)))
 	}
-	static func delete (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Spreadsheet.Operation {
+	static func delete (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Sheet.Operation {
 		.init(deleteDimension: .init(range: .init(sheetId: sheetId,
 												  dimension: dimension,
 												  length: nil,
 												  startIndex: range.lowerBound,
 												  endIndex: range.upperBound)))
 	}
-	static func append (sheetId: Int, size: Int, dimension: Sheet.Dimension) -> Spreadsheet.Operation {
+	static func move (sheetId: Int, range: Range<Int>, to dest: Int, dimension: Sheet.Dimension) -> Sheet.Operation {
+		.init(moveDimension: .init(source: .init(sheetId: sheetId,
+												  dimension: dimension,
+												  startIndex: range.lowerBound,
+												  endIndex: range.upperBound),
+								   destinationIndex: dest))
+	}
+	static func append (sheetId: Int, size: Int, dimension: Sheet.Dimension) -> Sheet.Operation {
 		.init(appendDimension: .init(sheetId: sheetId,
 									 dimension: dimension,
 									 length: size,
 									 startIndex: nil,
 									 endIndex: nil))
 	}
-	static func deleteSheet (sheetId: Int) -> Spreadsheet.Operation {
+	static func deleteSheet (sheetId: Int) -> Sheet.Operation {
 		.init(deleteSheet: .init(sheetId: sheetId,
 								 dimension: nil,
 								 length: nil,
 								 startIndex: nil,
 								 endIndex: nil))
 	}
-	static func addSheet (title: String, grid: Sheet.Properties.Grid?) -> Spreadsheet.Operation {
-		.init(addSheet: .init(properties: .init(title: title, sheetId: nil, gridProperties: grid)))
+	static func addSheet (title: String, grid: Sheet.Properties.Grid?) -> Sheet.Operation {
+		.init(addSheet: .init(properties: .init(title: title, gridProperties: grid)))
 	}
 	
+}
+public extension Array where Element == Sheet.RowData {
+	init(from rows: [[String]]) {
+		self = rows.map { .init(values: $0.map { .init(userEnteredValue: .init(stringValue: $0) ) }) }
+	}
 }
