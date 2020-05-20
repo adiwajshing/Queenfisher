@@ -26,9 +26,9 @@ public class AtomicSheet <A: Authenticator>: SheetInteractable {
 	
 	private(set) public var end: Sheet.Location = .cell(0, 0)
 	private(set) public var data: [[String]] = .init()
-	private var operationQueue = [Sheet.Operation]()
 	
-	private var uploading = false
+	private var operationQueue = [Sheet.Operation]()
+	var uploading = false
 	
 	private let onLoad = Promise<Void>.pending()
 	private var pendingOperationChain: Promise<Void>
@@ -54,22 +54,34 @@ public class AtomicSheet <A: Authenticator>: SheetInteractable {
 	public func operationsLeft () -> Promise<Int> {
 		executeInPendingChain { self.operationQueue.count }
 	}
-	private func executeInPendingChain <T> (_ block: @escaping () throws -> T) -> Promise<T> {
+	func executeInPendingChain <T> (_ block: @escaping () throws -> T) -> Promise<T> {
 		Promise(on: serialQueue, { (fulfill, reject) in
 			let promise = self.pendingOperationChain
-				.then(on: self.serialQueue) {
-					do {
-						fulfill(try block())
-					} catch {
-						reject (error)
-					}
-				}
-			self.pendingOperationChain = promise.always(on: self.queue) { }
+						.then(on: self.serialQueue) {
+							do {
+								fulfill(try block())
+							} catch {
+								reject(error)
+							}
+						}
+			
+			self.pendingOperationChain = promise.then(on: self.queue) { _ in }
+		})
+	}
+	func executeInPendingChain <T> (_ block: @escaping () throws -> Promise<T>) -> Promise<T> {
+		Promise(on: serialQueue, { (fulfill, reject) in
+			let promise = self.pendingOperationChain
+						.then(on: self.serialQueue) { try block() }
+						.then(on: self.serialQueue) { fulfill($0) }
+						.catch(on: self.serialQueue, reject)
+			
+			self.pendingOperationChain = promise.then(on: self.queue) { _ in }
 		})
 	}
 	
+	
 	public func operate (using block: @escaping (AtomicSheet) throws -> Void) -> Promise<Void> {
-		executeInPendingChain {
+		executeInPendingChain { () -> Void in
 			try block(self)
 			if !self.uploading {
 				self.scheduleUpload(in: self.uploadInterval)
@@ -122,6 +134,31 @@ public class AtomicSheet <A: Authenticator>: SheetInteractable {
 			}
 		}
 	}
+	public func move (dimension dim: Sheet.Dimension, range: Range<Int>, to index: Int) throws {
+		try operate(op: .move(sheetId: sheetId, range: range, to: index, dimension: dim)) {
+			let count = range.upperBound-range.lowerBound
+			if dim == .columns {
+				fatalError("not implemented yet")
+			} else {
+				if range.contains(index) {
+					throw OperationError.invalidMove
+				}
+				if !data.indices.contains(range.lowerBound) ||
+				   !data.indices.contains(range.upperBound) ||
+				   !data.indices.contains(index) {
+					throw OperationError.outOfBounds
+				}
+				let rows = range.map { _ in data.remove(at: range.lowerBound) }
+				
+				if index < range.lowerBound {
+					self.data.insert(contentsOf: rows, at: index)
+				} else if index > range.upperBound {
+					self.data.insert(contentsOf: rows, at: index-count)
+				}
+
+			}
+		}
+	}
 	public func set (rows: [[String]], at loc: Sheet.Location) throws {
 		try operate(op: .updateCells(sheetId: sheetId, rows: rows, start: loc)) {
 			let celledLoc = loc.celled()
@@ -150,15 +187,15 @@ public class AtomicSheet <A: Authenticator>: SheetInteractable {
 	public func clear () throws {
 		try operate(op: .clear(sheetId: sheetId)) { data.removeAll() }
 	}
-	private func operate (op: Sheet.Operation, _ exec: () throws -> Void) throws {
+	func operate (op: Sheet.Operation, _ exec: () throws -> Void) throws {
 		try exec ()
 		operationQueue.append(op)
 	}
 	
-	private func scheduleUpload (in time: DispatchTimeInterval) {
+	func scheduleUpload (in time: DispatchTimeInterval) {
 		queue.asyncAfter(deadline: .now() + time, execute: { _ = self.beginUpload() })
 	}
-	private func beginUpload () -> Promise<Void> {
+	func beginUpload () -> Promise<Void> {
 		Promise(on: serialQueue) { (fulfill, reject) in
 			if !self.uploading, self.operationQueue.count > 0 {
 				self.uploading = true
@@ -238,6 +275,7 @@ public class AtomicSheet <A: Authenticator>: SheetInteractable {
 }
 public enum OperationError: Error {
 	case outOfBounds
+	case invalidMove
 }
 public protocol AtomicSheetDelegate: class {
 	func uploadWillBegin (_ sheet: String, operations: [Sheet.Operation])

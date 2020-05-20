@@ -18,6 +18,24 @@ public extension Collection {
     func binarySearch(where predicate: (Element) -> BinarySearchResult) -> Index {
         var low = startIndex
         var high = endIndex
+		
+		// take care of base cases
+		if count == 0 {
+			return low
+		}
+		if predicate(self[low]) != .forward {
+			return low
+		}
+		switch predicate(self[index(high, offsetBy: -1)]) {
+		case .forward:
+			return high
+		case .equal:
+			return index(high, offsetBy: -1)
+		default:
+			break
+		}
+		
+		// perform binary search
         while low != high {
             let mid = index(low, offsetBy: distance(from: low, to: high)/2)
 			switch predicate(self[mid]) {

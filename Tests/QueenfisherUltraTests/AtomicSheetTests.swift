@@ -33,7 +33,7 @@ final class AtomicSheetTests: XCTestCase {
 	let personsData = (0..<300).map { _ in Person.random() }
 	let header = [ "DOB", "ID", "Email", "Name" ]
 	
-	let testSheet = "CBC Parents Form"//"AtomicSheetTest"
+	let testSheet = "AtomicSheetTest"
 	
 	var sheet: AtomicSheet<GoogleServiceAccount>!
 	let auth = AuthenticationTests()
@@ -52,7 +52,7 @@ final class AtomicSheetTests: XCTestCase {
 	}
 	func testWriteHeader () {
 		loadSheetIfRequired()
-		sheet.operate {
+		_ = sheet.operate {
 			try $0.clear()
 			try $0.set(rows: [self.header], at: .row(0))
 		}
@@ -64,7 +64,7 @@ final class AtomicSheetTests: XCTestCase {
 		var rows = [header]
 		rows += personsData.map { $0.row() }
 		
-		sheet.operate {
+		_ = sheet.operate {
 			try $0.clear()
 			try $0.set(rows: [self.header], at: .row(0))
 			
@@ -77,15 +77,15 @@ final class AtomicSheetTests: XCTestCase {
 	func testManyAppendAndInsert () {
 		loadSheetIfRequired()
 		
-		sheet.operate {
+		_ = sheet.operate {
 			try $0.clear()
 			try $0.set(rows: [self.header], at: .row(0))
 		}
 		DispatchQueue.concurrentPerform(iterations: personsData.count, execute: { i in
 			let person = self.personsData[i]
-			sheet.operate(using: { sheet in
+			_ = sheet.operate(using: { sheet in
 				let actual = sheet.data.suffix(from: 1)
-				let index = actual.binarySearch(comparing: {$0[1]}, with: person.email)
+				let index = actual.binarySearch(comparing: {$0[2]}, with: person.email)
 				if actual.indices.contains(index) {
 					try sheet.insert(dimension: .rows, range: index..<(index+1))
 					try sheet.set(rows: [person.row()], at: .row(index))
@@ -104,8 +104,8 @@ final class AtomicSheetTests: XCTestCase {
 		let personCountToDelete = personsData.count/3
 		DispatchQueue.concurrentPerform(iterations: personCountToDelete, execute: { i in
 			let person = self.personsData[i]
-			sheet.operate(using: { sheet in
-				let index = sheet.data.suffix(from: 1).binarySearch(comparing: {$0[1]}, with: person.email)
+			_ = sheet.operate(using: { sheet in
+				let index = sheet.data.suffix(from: 1).binarySearch(comparing: {$0[2]}, with: person.email)
 				try sheet.delete(dimension: .rows, range: index..<(index+1))
 			})
 		})
@@ -114,6 +114,20 @@ final class AtomicSheetTests: XCTestCase {
 		let persons = personsData.suffix(from: personCountToDelete).sorted(by: { $0.email < $1.email })
 		rows.append(contentsOf: persons.map { $0.row() } )
 		
+		waitAndMatch(rows: rows)
+	}
+	func testMove () {
+		testManyAppendAndInsert()
+		
+		let start = personsData.count-15
+		let end = start+5
+		_ = sheet.operate {
+			try $0.move(dimension: .rows, range: start..<end, to: 1)
+			try $0.move(dimension: .rows, range: start..<end, to: end+5)
+		}
+		.catch { print("error: \($0)") }
+		
+		let rows = try! await(sheet.get())
 		waitAndMatch(rows: rows)
 	}
 	func waitAndMatch (rows: [[String]]) {

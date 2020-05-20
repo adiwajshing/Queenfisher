@@ -151,15 +151,22 @@ final class SpreadsheetTests: XCTestCase {
 			XCTFail("Test sheet not present")
 			return
 		}
+		let pIndex = 3
+		let rRange = 1..<2
 		
 		var expected = data2write
-		expected.insert(expected.remove(at: 1), at: 0)
-		expected.insert(expected.remove(at: 2), at: 1)
+		let rows = rRange.map { _ in expected.remove(at: rRange.lowerBound) }
+		
+		if pIndex < rRange.lowerBound {
+			expected.insert(contentsOf: rows, at: pIndex)
+		} else if pIndex > rRange.upperBound {
+			expected.insert(contentsOf: rows, at: pIndex-(rRange.upperBound-rRange.lowerBound))
+		}
 		
 		let start: Sheet.Location = .cell(0, 0)
 		let end: Sheet.Location = .cell(data2write[0].count-1, data2write.count-1)
 		let task = Promise(())
-			.then(on: queue) { try self.sheet!.move(sheetId: sheetId, range: 1..<3, to: 0, dimension: .rows) }
+			.then(on: queue) { try self.sheet!.move(sheetId: sheetId, range: rRange, to: pIndex, dimension: .rows) }
 			.then(on: queue) { _ in try self.sheet!.read(sheet: self.testSheetTitle, range: (start, end)) }
 			.then (on: queue) { XCTAssertEqual(expected, $0.values) }
 		XCTAssertNoThrow(_ = try await(task))

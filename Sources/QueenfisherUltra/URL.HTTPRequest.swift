@@ -56,7 +56,7 @@ public extension URL {
 				let object = try decoder.decode(O.self, from: data)
 				return object
 			} catch {
-				print (error)
+				//print (error)
 				let err: E
 				do {
 					err = try decoder.decode(E.self, from: data)
