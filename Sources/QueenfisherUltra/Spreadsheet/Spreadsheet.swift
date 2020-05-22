@@ -18,7 +18,7 @@ public class Spreadsheet<A: Authenticator>: SheetInteractable, Codable {
 	public lazy var queue = { DispatchQueue.global() }()
 	
 	public static func get (_ spreadsheetId: String, using authenticator: Auth) throws -> Promise<Spreadsheet> {
-		let url = googleApiUrl.appendingPathComponent(spreadsheetId)
+		let url = sheetsApiUrl.appendingPathComponent(spreadsheetId)
 		let queue: DispatchQueue = .global()
 		return try authenticator.authenticationHeaders(scope: .sheets)
 		.then(on: queue) { try url.httpRequest(headers: $0,
@@ -70,10 +70,6 @@ public class Spreadsheet<A: Authenticator>: SheetInteractable, Codable {
 	}
 	public func clear (sheetId: Int) throws -> Promise<Sheet.UpdateResponse> {
 		try batchUpdate(.clear(sheetId: sheetId))
-	}
-	
-	deinit {
-		print("yeah deinit")
 	}
 }
 public extension Spreadsheet {

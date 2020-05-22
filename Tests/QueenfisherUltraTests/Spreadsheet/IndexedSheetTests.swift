@@ -1,6 +1,5 @@
 import XCTest
 import Promises
-import Atomics
 @testable import QueenfisherUltra
 
 final class IndexedSheetTests: XCTestCase {
@@ -67,7 +66,7 @@ final class IndexedSheetTests: XCTestCase {
 	}
 	func loadSheetIfRequired () {
 		if auth.acc == nil {
-			try? auth.loadAuth()
+			try? auth.loadServiceAccount(scope: .sheets)
 		}
 		if sheet == nil {
 			sheet = .init(spreadsheetId: testSpreadsheetId, sheetTitle: sheetTitle,

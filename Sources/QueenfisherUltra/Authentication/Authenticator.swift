@@ -23,25 +23,8 @@ public protocol Authenticator: Codable {
 public extension Authenticator {
 	/// Authenticate & return the authorization headers required to make an HTTP request
 	func authenticationHeaders (scope: GoogleScope) throws -> Promise<[String:String]> {
-		try authenticate(scope: .sheets)
+		try authenticate(scope: scope)
 			.then (on: .global()) { ["authorization": "\($0.tokenType) \($0.accessToken)"] }
-	}
-}
-public struct GoogleAPIKey: Codable, Authenticator {
-	public let accessToken: String
-	/// HTTP token type: bearer, basic etc.
-	public let tokenType: String
-	/// Date after which the token will be invalid
-	internal(set) public var expiresIn: Date
-	/// Check if the API Key has expired
-	public var isExpired: Bool { Date ().timeIntervalSince(expiresIn) > 0 }
-	
-	public func authenticate(scope: GoogleScope) throws -> Promise<GoogleAPIKey> {
-		if isExpired {
-			throw GoogleAuthenticationError.init(error: "token expired")
-		} else {
-			return .init(self)
-		}
 	}
 }
 struct GoogleAuthenticationError: Error, Codable {
@@ -51,6 +34,21 @@ struct GoogleAuthenticationError: Error, Codable {
 public enum GoogleScope: String, Codable {
 	case sheets = "https://www.googleapis.com/auth/spreadsheets"
 	case devStorageReadOnly = "https://www.googleapis.com/auth/devstorage.read_only"
-	case sendMail = "https://www.googleapis.com/auth/gmail.send"
+	case mailSend = "https://www.googleapis.com/auth/gmail.send"
+	case mailRead = "https://www.googleapis.com/auth/gmail.readonly"
+	case mailFullAccess = "https://mail.google.com/"
 	case calender = "https://www.googleapis.com/auth/calendar"
+	case profile = "https://www.googleapis.com/auth/userinfo.profile"
+}
+
+extension Decodable {
+	
+	static func loading (fromJSONAt url: URL) throws -> Self {
+		let data = try Data (contentsOf: url)
+		let decoder = JSONDecoder ()
+		decoder.keyDecodingStrategy = .convertFromSnakeCase
+		let obj = try decoder.decode(Self.self, from: data)
+		return obj
+	}
+	
 }

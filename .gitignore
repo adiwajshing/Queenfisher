@@ -1,2 +1,5 @@
-
-Tests/QueenfisherUltraTests/service_acc_creds.json
+Tests/QueenfisherUltraTests/Keys/client_secret.json
+Tests/QueenfisherUltraTests/Keys/apikey.json
+Tests/QueenfisherUltraTests/Keys/client_secret.json
+Tests/QueenfisherUltraTests/Keys/service_acc_creds.json
+Tests/QueenfisherUltraTests/Keys/client_secret.json

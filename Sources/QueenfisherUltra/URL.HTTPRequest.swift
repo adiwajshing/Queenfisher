@@ -15,18 +15,29 @@ public extension URL {
 		let encoder = JSONEncoder()
 		encoder.keyEncodingStrategy = .convertToSnakeCase
 		encoder.dateEncodingStrategy = .secondsSince1970
+		encoder.dataEncodingStrategy = .base64
 		return encoder
 	}()
 	static var defaultDecoder: JSONDecoder = {
-		let encoder = JSONDecoder()
-		encoder.keyDecodingStrategy = .convertFromSnakeCase
-		encoder.dateDecodingStrategy = .secondsSince1970
-		return encoder
+		let decoder = JSONDecoder()
+		decoder.keyDecodingStrategy = .convertFromSnakeCase
+		decoder.dateDecodingStrategy = .secondsSince1970
+		decoder.dataDecodingStrategy = .custom({ (decoder) -> Data in
+			let container = try decoder.singleValueContainer()
+			let decodedStr = try container.decode(String.self)
+							.replacingOccurrences(of: "_", with: "/")
+							.replacingOccurrences(of: "-", with: "+")
+			if let data = Data(base64Encoded: decodedStr) {
+				return data
+			}
+			throw DecodingError.dataCorruptedError(in: container, debugDescription: "Data corrupted")
+		})
+		return decoder
 	}()
 	
 	enum HTTPError: Error {
 		case noData
-		case decodingError (Data)
+		case decodingError (Error, Error, Data)
 	}
 	
 	func httpRequest (request: URLRequest) throws -> Promise<Data> {
@@ -48,21 +59,18 @@ public extension URL {
 														 errorType: E.Type) throws -> Promise<O> {
 		try httpRequest(request: request)
 		.then(on: .global()) { data -> O in
-			let decoder = JSONDecoder ()
-			decoder.keyDecodingStrategy = .convertFromSnakeCase
-			decoder.dateDecodingStrategy = .secondsSince1970
-			
+			//print ("resp:" + String(data: data, encoding: .utf8)!)
 			do {
 				let object = try decoder.decode(O.self, from: data)
 				return object
-			} catch {
-				//print (error)
+			} catch let err0 {
+				
 				let err: E
 				do {
 					err = try decoder.decode(E.self, from: data)
-				} catch {
-					print (String(data: data, encoding: .utf8)!)
-					throw error
+				} catch let err1 {
+					print ("resp:" + String(data: data, encoding: .utf8)!)
+					throw HTTPError.decodingError(err0, err1, data)
 				}
 				throw err
 			}
@@ -95,12 +103,23 @@ public extension URL {
 												   encoder: JSONEncoder = URL.defaultEncoder,
 												   decoder: JSONDecoder = URL.defaultDecoder,
 												   errorType: E.Type) throws -> Promise<O> {
-		var request = URLRequest (url: self)
+		var request: URLRequest
+		if method == "GET" {
+			let dict: [String:Any] = try JSONSerialization.jsonObject(with: try encoder.encode(body), options: []) as! [String:Any]
+			
+			var comps = URLComponents(url: self, resolvingAgainstBaseURL: false)!
+			let query = dict.map { URLQueryItem(name: $0.key, value: "\($0.value)") }
+			comps.queryItems = query
+			//print(comps.url!)
+			request = URLRequest (url: comps.url!)
+		} else {
+			request = URLRequest (url: self)
+			request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+			request.httpBody = try encoder.encode(body)
+		}
 		for (key, value) in headers {
 			request.addValue(value, forHTTPHeaderField: key)
 		}
-		request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-		request.httpBody = try encoder.encode(body)
 		request.httpMethod = method
 		request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
 		

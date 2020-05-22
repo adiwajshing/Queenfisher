@@ -7,11 +7,12 @@
 
 import Foundation
 import Promises
-/// Upload and maintain a keyed database in a Google Sheet in O(logN) time
+
+/// Methods to upload & maintain a keyed database in a Google Sheet in O(log N) time
 public class IndexedSheet <A: Authenticator, K: Comparable & Hashable>: AtomicSheet<A> {
 	/// method to generate the key for the given row
 	let indexer: (([String]) -> K)
-	/// the header for the DB
+	/// the header row for the DB
 	let header: [String]
 	
 	public init (spreadsheetId: String, sheetTitle: String,
@@ -21,7 +22,80 @@ public class IndexedSheet <A: Authenticator, K: Comparable & Hashable>: AtomicSh
 		self.header = header
 		super.init(spreadsheetId: spreadsheetId, sheetTitle: sheetTitle, using: authenticator, delegate: delegate)
 	}
-	public func synchronize (with rowFunction: @escaping () -> Promise<[[String]]>) -> Promise<Int> {
+	
+	public func update (values: String..., for key: K, offset: Int, binarySearch: Bool=true) -> Promise<Void> {
+		operate {
+			let actual = $0.data.suffix(from: 1)
+			let index = self.position(for: key, in: actual, binarySearch: binarySearch)
+			if actual.indices.contains(index), self.indexer(actual[index])==key {
+				try self.set(rows: [ values ], at: .cell(offset, index))
+			} else {
+				throw IndexingError.keyNotFound(key)
+			}
+		}
+	}
+	
+	public func place (row: [String], binarySearch: Bool=true) -> Promise<Void> {
+		operate { try self.placeUnsafe(s: $0, row: row, binarySearch: binarySearch) }
+	}
+	func placeUnsafe (s: AtomicSheet<Auth>, row: [String], binarySearch: Bool) throws {
+		if s.data.count < 1 {
+			try append(rows: [self.header, row])
+		} else {
+			let actual = s.data.suffix(from: 1)
+			let obj = self.indexer(row)
+			let index = self.position(for: obj, in: actual, binarySearch: binarySearch)
+			
+			if actual.indices.contains(index) {
+				if self.indexer(actual[index]) > obj {
+					try s.insert(dimension: .rows, range: index..<(index+1))
+				}
+				try s.set(rows: [row], at: .row(index))
+			} else {
+				try s.append(rows: [row])
+			}
+		}
+	}
+	public func delete (row: [String], binarySearch: Bool=true) -> Promise<Void> {
+		delete(rowWithKey: indexer(row), binarySearch: binarySearch)
+	}
+	public func delete (rowWithKey key: K, binarySearch: Bool=true) -> Promise<Void> {
+		operate { _ in try self.deleteUnsafe(rowWithKey: key, binarySearch: binarySearch) }
+	}
+	func deleteUnsafe (rowWithKey key: K, binarySearch: Bool) throws {
+		if data.count > 1 {
+			let actual = data.suffix(from: 1)
+			let index = self.position(for: key, in: actual, binarySearch: binarySearch)
+			if actual.indices.contains(index), self.indexer(actual[index]) == key {
+				try delete(dimension: .rows, range: index..<(index+1))
+			} else {
+				
+				throw IndexingError.keyNotFound(key)
+			}
+		}
+	}
+	func position (for key: K, in slice: ArraySlice<[String]>, binarySearch: Bool) -> ArraySlice<[String]>.Index {
+		let index: ArraySlice<[String]>.Index
+		if binarySearch {
+			index = slice.binarySearch(comparing: indexer, with: key)
+		} else {
+			index = slice.firstIndex(where: { indexer($0)>=key }) ?? (slice.endIndex+1)
+		}
+		return index
+	}
+	
+	public enum IndexingError: Error {
+		case keyNotFound (K)
+		case keysUnordered ([String], [String])
+		case invalidSizeOfRow ([String])
+		case duplicateKeys (K)
+	}
+	
+}
+
+public extension IndexedSheet {
+	
+	func synchronize (with rowFunction: @escaping () -> Promise<[[String]]>) -> Promise<Int> {
 		executeInPendingChain {
 			rowFunction ()
 			.then(on: self.queue) { rows -> Int in
@@ -95,74 +169,4 @@ public class IndexedSheet <A: Authenticator, K: Comparable & Hashable>: AtomicSh
 			}
 		}
 	}
-	
-	public func update (values: String..., for key: K, offset: Int, binarySearch: Bool=true) -> Promise<Void> {
-		operate {
-			let actual = $0.data.suffix(from: 1)
-			let index = self.position(for: key, in: actual, binarySearch: binarySearch)
-			if actual.indices.contains(index), self.indexer(actual[index])==key {
-				try self.set(rows: [ values ], at: .cell(offset, index))
-			} else {
-				throw IndexingError.keyNotFound(key)
-			}
-		}
-	}
-	
-	public func place (row: [String], binarySearch: Bool=true) -> Promise<Void> {
-		operate { try self.placeUnsafe(s: $0, row: row, binarySearch: binarySearch) }
-	}
-	func placeUnsafe (s: AtomicSheet<Auth>, row: [String], binarySearch: Bool) throws {
-		if s.data.count < 1 {
-			try append(rows: [self.header, row])
-		} else {
-			let actual = s.data.suffix(from: 1)
-			let obj = self.indexer(row)
-			let index = self.position(for: obj, in: actual, binarySearch: binarySearch)
-			
-			if actual.indices.contains(index) {
-				if self.indexer(actual[index]) > obj {
-					try s.insert(dimension: .rows, range: index..<(index+1))
-				}
-				try s.set(rows: [row], at: .row(index))
-			} else {
-				try s.append(rows: [row])
-			}
-		}
-	}
-	public func delete (row: [String], binarySearch: Bool=true) -> Promise<Void> {
-		delete(rowWithKey: indexer(row), binarySearch: binarySearch)
-	}
-	public func delete (rowWithKey key: K, binarySearch: Bool=true) -> Promise<Void> {
-		operate { _ in try self.deleteUnsafe(rowWithKey: key, binarySearch: binarySearch) }
-	}
-	func deleteUnsafe (rowWithKey key: K, binarySearch: Bool) throws {
-		if data.count > 1 {
-			let actual = data.suffix(from: 1)
-			let index = self.position(for: key, in: actual, binarySearch: binarySearch)
-			if actual.indices.contains(index), self.indexer(actual[index]) == key {
-				try delete(dimension: .rows, range: index..<(index+1))
-			} else {
-				
-				throw IndexingError.keyNotFound(key)
-			}
-		}
-	}
-	private func position (for key: K, in slice: ArraySlice<[String]>, binarySearch: Bool) -> ArraySlice<[String]>.Index {
-		let index: ArraySlice<[String]>.Index
-		if binarySearch {
-			index = slice.binarySearch(comparing: indexer, with: key)
-		} else {
-			index = slice.firstIndex(where: { indexer($0)>=key }) ?? (slice.endIndex+1)
-		}
-		return index
-	}
-	
-	public enum IndexingError: Error {
-		case keyNotFound (K)
-		case keysUnordered ([String], [String])
-		case invalidSizeOfRow ([String])
-		case duplicateKeys (K)
-	}
-	
 }
-

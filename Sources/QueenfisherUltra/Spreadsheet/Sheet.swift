@@ -10,6 +10,10 @@ import Foundation
 /// A single sheet in a Google Spreadsheet
 public struct Sheet: Codable {
 	
+	let properties: Properties
+	let data: [Sheet.Data]?
+	
+	
 	enum SheetType: String, Codable {
 		case unspecified = "SHEET_TYPE_UNSPECIFIED"
 		case grid = "GRID"
@@ -17,7 +21,6 @@ public struct Sheet: Codable {
 	}
 	
 	public struct Properties: Codable {
-		
 		public struct Grid: Codable {
 			let rowCount: Int
 			let columnCount: Int
@@ -84,6 +87,17 @@ public struct Sheet: Codable {
 		let rowData: [RowData]?
 	}
 	
-	let properties: Properties
-	let data: [Sheet.Data]?
+	public struct WriteResponse: Codable {
+		let updatedRange: String
+		let updatedRows: Int
+		let updatedColumns: Int
+	}
+	public struct ErrorResponse: Codable, Error {
+		struct Error: Codable {
+			let code: Int
+			let status: String
+			let message: String
+		}
+		let error: Error
+	}
 }
