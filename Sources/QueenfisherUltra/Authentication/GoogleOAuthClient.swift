@@ -10,19 +10,16 @@ import Promises
 
 let oAuthApiUrl = URL(string: "https://oauth2.googleapis.com/token")!
 
-public class GoogleOAuthClient: Codable, AuthenticationFactory {
+public struct GoogleOAuthClient: Codable, AccessTokenFactory {
 	
 	public let clientId: String
 	public let clientSecret: String
 	public let redirectUris: [URL]
 	public let authUri: URL
 	
-	lazy var factoryKeys: [GoogleScope:GoogleAPIKey] = { [:] } ()
+	private var factoryToken: AccessToken?
 	
-	lazy var apiKeys = { [GoogleScope:Promise<GoogleAPIKey>]() }()
-	lazy var queue: DispatchQueue = { .init(label: "", attributes: []) }()
-	
-	func authUrl (for scope: GoogleScope, loginHint: String? = nil) -> URL {
+	public func authUrl (for scope: GoogleScope, loginHint: String? = nil) -> URL {
 		var comps = URLComponents(url: authUri, resolvingAgainstBaseURL: false)!
 		var query: [URLQueryItem] = []
 		query.append(.init(name: "client_id", value: clientId))
@@ -37,7 +34,7 @@ public class GoogleOAuthClient: Codable, AuthenticationFactory {
 		return comps.url!
 	}
 	
-	func apiKey (from code: String) throws -> Promise<GoogleAPIKey> {		
+	public func fetchToken (fromCode code: String) throws -> Promise<AccessToken> {
 		let req: OAuthRequest = .init(code: code,
 									  refreshToken: nil,
 									  clientId: clientId,
@@ -45,17 +42,13 @@ public class GoogleOAuthClient: Codable, AuthenticationFactory {
 									  redirectUri: redirectUris.first!,
 									  grantType: .authorizationCode)
 		return try oAuthApiUrl.httpRequest(headers: [:], body: req, errorType: GoogleAuthenticationError.self)
-			.then(on: queue) { (k: GoogleAPIKey) -> GoogleAPIKey in
-				let key = k.with(expiry: Date().addingTimeInterval(k.expiresIn.timeIntervalSince1970))
-				self.factoryKeys[key.scope] = key
-				self.apiKeys[key.scope] = .init(key)
-				return key
+			.then(on: .global()) { (k: AccessToken) -> AccessToken in
+				k.with(expiry: Date().addingTimeInterval(k.expiresIn.timeIntervalSince1970))
 			}
 	}
-	
-	func getKey(scope: GoogleScope) throws -> Promise<GoogleAPIKey> {
-		guard let factoryKeyToken = self.factoryKeys[scope]?.refreshToken else {
-			throw GoogleAuthenticationError.init(error: "refresh token key absent")
+	public func fetchToken(for scope: GoogleScope) throws -> Promise<AccessToken> {
+		guard let factoryKeyToken = self.factoryToken?.refreshToken else {
+			throw GoogleAuthenticationError.init(error: "refresh token absent")
 		}
 		
 		let req: OAuthRequest = .init(code: nil,
@@ -66,11 +59,16 @@ public class GoogleOAuthClient: Codable, AuthenticationFactory {
 									  grantType: .refreshToken)
 		return try oAuthApiUrl.httpRequest(headers: [:], body: req, errorType: GoogleAuthenticationError.self)
 	}
-	func setFactoryKey (_ key: GoogleAPIKey) throws {
-		guard let _ = key.refreshToken else {
-			throw GoogleAuthenticationError.init(error: "refresh token required for factory key")
+	public func factory(for scope: GoogleScope, usingAccessToken token: AccessToken) throws -> AuthenticationFactory {
+		guard let _ = token.refreshToken else {
+			throw GoogleAuthenticationError.init(error: "refresh token absent")
 		}
-		queue.sync { factoryKeys[key.scope] = key }
+		guard token.scope.contains(scope) else {
+			throw GoogleAuthenticationError.init(error: "token does not contain required scopes")
+		}
+		var client = self
+		client.factoryToken = token
+		return .init(scope: scope, using: client)
 	}
 	
 	struct OAuthRequest: Codable {

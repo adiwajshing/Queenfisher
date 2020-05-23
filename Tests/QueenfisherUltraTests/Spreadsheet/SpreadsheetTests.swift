@@ -12,15 +12,13 @@ final class SpreadsheetTests: XCTestCase {
 	
 	let queue = DispatchQueue.global()
 	
-	var sheet: Spreadsheet<GoogleServiceAccount>!
-	var auth = AuthenticationTests ()
+	var sheet: Spreadsheet!
 	
 	func testGetSpreadsheet () {
-		if auth.acc == nil {
-			auth.testServiceAccountAuth()
-		}
+
 		if sheet == nil {
-			XCTAssertNoThrow(sheet = try await (Spreadsheet.get(testSpreadsheetId, using: auth.acc)))
+			let auth = AuthenticationTests().getFactory(for: .sheets)!
+			XCTAssertNoThrow(sheet = try await (Spreadsheet.get(testSpreadsheetId, using: auth)))
 			if let sheet = sheet {
 				print("Got spreadsheet '\(sheet.properties.title)', sheets: \(sheet.sheets.map({$0.properties.title}))")
 			}
@@ -73,7 +71,7 @@ final class SpreadsheetTests: XCTestCase {
 	func testReadSheet () {
 		testGetSpreadsheet()
 		let task = Promise(())
-			.then(on: queue) { try self.sheet!.read(sheet: "Studentssd") }
+			.then(on: queue) { try self.sheet!.read(sheet: "Students") }
 			.then(on: queue) { print ($0) }
 		XCTAssertNoThrow(_ = try await(task))
 	}

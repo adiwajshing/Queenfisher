@@ -1,23 +1,28 @@
 import Promises
 import Foundation
 
-public class Spreadsheet<A: Authenticator>: SheetInteractable, Codable {
-	public typealias Auth = A
+public class Spreadsheet: SheetInteractable, Decodable {
 	
 	public struct Properties: Codable {
 		let title: String
 	}
-	
 	public let spreadsheetId: String
 	public let properties: Properties
 	public let spreadsheetUrl: URL
 	
 	private(set) public var sheets: [Sheet]
-	private(set) public var authenticator: Auth?
+	private(set) public var authenticator: Authenticator?
+	public let queue = DispatchQueue.global()
 	
-	public lazy var queue = { DispatchQueue.global() }()
-	
-	public static func get (_ spreadsheetId: String, using authenticator: Auth) throws -> Promise<Spreadsheet> {
+	/// Custom decoding init to allow `DispatchQueue` & `Authenticator` properties
+	public required init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: CodingKeys.self)
+		spreadsheetId = try container.decode(String.self, forKey: CodingKeys.spreadsheetId)
+		properties = try container.decode(Properties.self, forKey: CodingKeys.properties)
+		spreadsheetUrl = try container.decode(URL.self, forKey: CodingKeys.spreadsheetUrl)
+		sheets = try container.decode([Sheet].self, forKey: CodingKeys.sheets)
+	}
+	public static func get (_ spreadsheetId: String, using authenticator: Authenticator) throws -> Promise<Spreadsheet> {
 		let url = sheetsApiUrl.appendingPathComponent(spreadsheetId)
 		let queue: DispatchQueue = .global()
 		return try authenticator.authenticationHeaders(scope: .sheets)
@@ -71,11 +76,16 @@ public class Spreadsheet<A: Authenticator>: SheetInteractable, Codable {
 	public func clear (sheetId: Int) throws -> Promise<Sheet.UpdateResponse> {
 		try batchUpdate(.clear(sheetId: sheetId))
 	}
+	
+	public enum CodingKeys: String, CodingKey {
+		case spreadsheetId = "spreadsheetId"
+		case properties = "properties"
+		case spreadsheetUrl = "spreadsheetUrl"
+		case sheets = "sheets"
+	}
 }
 public extension Spreadsheet {
-	
 	static func spreadsheetUrl (forSpreadsheetId id: String) -> URL {
 		URL(string: "https://docs.google.com/spreadsheets/d/\(id)/edit")!
 	}
-	
 }

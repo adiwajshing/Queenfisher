@@ -34,15 +34,18 @@ final class AtomicSheetTests: XCTestCase {
 	
 	let testSheet = "AtomicSheetTest"
 	
-	var sheet: AtomicSheet<GoogleServiceAccount>!
-	let auth = AuthenticationTests()
+	var sheet: AtomicSheet!
 	
 	func loadSheetIfRequired () {
-		if auth.acc == nil {
-			try? auth.loadServiceAccount(scope: .sheets)
-		}
 		if sheet == nil {
-			sheet = .init(spreadsheetId: testSpreadsheetId, sheetTitle: testSheet, using: auth.acc!, delegate: self)
+			guard let auth = AuthenticationTests ().getFactory(for: .sheets) else {
+				XCTFail("Auth nil")
+				return
+			}
+			sheet = .init(spreadsheetId: testSpreadsheetId,
+						  sheetTitle: testSheet,
+						  using: auth,
+						  delegate: self)
 		}
 	}
 	func testLoadSheet () {

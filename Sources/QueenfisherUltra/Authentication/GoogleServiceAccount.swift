@@ -10,7 +10,7 @@ import SwiftJWT
 import Promises
 
 /// Google Service Account to use for authentication. See https://developers.google.com/identity/protocols/oauth2/service-account
-public class GoogleServiceAccount: Codable, AuthenticationFactory {
+public class GoogleServiceAccount: Codable, AccessTokenFactory {
 	/// The JWT Claim
 	struct Claim: Claims {
 		let iss: String
@@ -18,6 +18,12 @@ public class GoogleServiceAccount: Codable, AuthenticationFactory {
 		let exp: Date
 		let iat: Date
 		let scope: GoogleScope
+	}
+	/// Access token returned for service accounts
+	struct SAToken: Decodable {
+		let accessToken: String
+		let expiresIn: Double
+		let tokenType: String
 	}
 	/// account type, ("service_account" in this class)
 	public let type: String
@@ -32,10 +38,10 @@ public class GoogleServiceAccount: Codable, AuthenticationFactory {
 	/// URL to request authentication from
 	public let tokenUri: URL
 	
-	lazy var apiKeys = { [GoogleScope:Promise<GoogleAPIKey>]() }()
-	lazy var queue: DispatchQueue = { .init(label: "", attributes: []) }()
-	
-	func getKey (scope: GoogleScope) throws -> Promise<GoogleAPIKey> {
+	public func factory (for scope: GoogleScope) -> AuthenticationFactory {
+		.init(scope: scope, using: self)
+	}
+	public func fetchToken (for scope: GoogleScope) throws -> Promise<AccessToken> {
 		/*
 			Structure of JWT & Claims from https://developers.google.com/identity/protocols/oauth2/service-account#authorizingrequests
 		*/
@@ -51,5 +57,12 @@ public class GoogleServiceAccount: Codable, AuthenticationFactory {
 		let body = ["grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", // Google requires this
 					"assertion": signed]
 		return try tokenUri.httpRequest(headers: [:], body: body, errorType: GoogleAuthenticationError.self)
+			.then(on: .global()) { (k: SAToken) -> AccessToken in
+				AccessToken(accessToken: k.accessToken,
+							tokenType: k.tokenType,
+							scope: scope,
+							refreshToken: nil,
+							expiresIn: Date().addingTimeInterval(k.expiresIn))
+			}
 	}
 }

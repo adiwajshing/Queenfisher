@@ -10,11 +10,9 @@ import Promises
 
 let sheetsApiUrl = URL (string: "https://sheets.googleapis.com/v4/spreadsheets/")!
 
-public protocol SheetInteractable{
-	associatedtype Auth: Authenticator
-	
+public protocol SheetInteractable {
 	var spreadsheetId: String {get}
-	var authenticator: Auth? {get}
+	var authenticator: Authenticator? {get}
 	var queue: DispatchQueue {get}
 }
 public extension SheetInteractable {

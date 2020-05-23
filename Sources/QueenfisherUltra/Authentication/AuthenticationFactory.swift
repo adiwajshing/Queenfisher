@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  AuthenticationFactory.swift
 //  
 //
 //  Created by Adhiraj Singh on 5/21/20.
@@ -8,54 +8,49 @@
 import Foundation
 import Promises
 
-protocol AuthenticationFactory: class, Authenticator {
-	var apiKeys: [GoogleScope:Promise<GoogleAPIKey>] { get set }
-	var queue: DispatchQueue { get }
-	
-	func getKey (scope: GoogleScope) throws -> Promise<GoogleAPIKey>
+public protocol AccessTokenFactory {
+	/// Fetches a fresh access token from Google
+	func fetchToken (for scope: GoogleScope) throws -> Promise<AccessToken>
 }
-extension AuthenticationFactory {
+
+public class AuthenticationFactory: Authenticator {
+	public let scope: GoogleScope
+	public let tokenFactory: AccessTokenFactory
 	
-	public func authenticate (scope: GoogleScope) throws -> Promise<GoogleAPIKey> {
-		let generateKeyPromise = { (scope: GoogleScope) throws -> Promise<GoogleAPIKey> in
-			print("Renewing API key for \(scope)...")
-			return try self.getKey(scope: scope)
-				.then(on: self.queue) { $0.with(expiry: Date().addingTimeInterval($0.expiresIn.timeIntervalSince1970)) }
-				.catch(on: self.queue) { _ in self.apiKeys[scope] = nil }
+	var promise: Promise<AccessToken>?
+	let queue: DispatchQueue = .init(label: "serial-auth-factory", attributes: [])
+	
+	public init (scope: GoogleScope, using factory: AccessTokenFactory) {
+		self.scope = scope
+		self.tokenFactory = factory
+	}
+	
+	func fetchToken () throws -> Promise<AccessToken> {
+		print("Renewing API key for \(self.scope)...")
+		return try tokenFactory.fetchToken(for: self.scope)
+			.then(on: self.queue) { $0.with(expiry: Date().addingTimeInterval($0.expiresIn.timeIntervalSince1970)) }
+			.catch(on: self.queue) { _ in self.promise = nil }
+	}
+	
+	public func authenticate (scope: GoogleScope) throws -> Promise<AccessToken> {
+		if !self.scope.contains(scope) {
+			throw GoogleAuthenticationError(error: "Cannot authenticate for given scope")
 		}
 		
 		return Promise(())
-		.then(on: queue) { _ -> Promise<GoogleAPIKey> in
-			if let p = self.apiKeys[scope] {
-				return p
-			} else {
-				let p = try generateKeyPromise(scope)
-				self.apiKeys[scope] = p
-				return p
+		.then(on: queue) { _ -> Promise<AccessToken> in
+			if self.promise == nil {
+				self.promise = try self.fetchToken()
 			}
+			return self.promise!
 		}
-		.then(on: queue) { key -> Promise<GoogleAPIKey> in
+		.then(on: queue) { key -> Promise<AccessToken> in
 			if key.isExpired {
-				let p = try generateKeyPromise(scope)
-				self.apiKeys[scope] = p
-				return p
+				self.promise = try self.fetchToken()
+				return self.promise!
 			} else {
 				return .init(key)
 			}
 		}
 	}
-}
-extension AuthenticationFactory where Self: Decodable {
-	
-	/// Load an authentication factory from a JSON stored in a file.
-	/// This file is usually the one downloaded after you create a client ID or service account
-	static func loading (fromJSONAt url: URL) throws -> Self {
-		let data = try Data (contentsOf: url)
-		let decoder = JSONDecoder ()
-		decoder.keyDecodingStrategy = .convertFromSnakeCase
-		let obj = try decoder.decode(Self.self, from: data)
-		obj.queue.sync { }
-		return obj
-	}
-	
 }

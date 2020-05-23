@@ -9,14 +9,14 @@ import Foundation
 import Promises
 
 /// Methods to upload & maintain a keyed database in a Google Sheet in O(log N) time
-public class IndexedSheet <A: Authenticator, K: Comparable & Hashable>: AtomicSheet<A> {
+public class IndexedSheet <K: Comparable & Hashable>: AtomicSheet {
 	/// method to generate the key for the given row
 	let indexer: (([String]) -> K)
 	/// the header row for the DB
 	let header: [String]
 	
 	public init (spreadsheetId: String, sheetTitle: String,
-				 using authenticator: Auth, header: [String],
+				 using authenticator: Authenticator, header: [String],
 				 indexer: @escaping (([String]) -> K), delegate: AtomicSheetDelegate? = nil) {
 		self.indexer = indexer
 		self.header = header
@@ -38,7 +38,7 @@ public class IndexedSheet <A: Authenticator, K: Comparable & Hashable>: AtomicSh
 	public func place (row: [String], binarySearch: Bool=true) -> Promise<Void> {
 		operate { try self.placeUnsafe(s: $0, row: row, binarySearch: binarySearch) }
 	}
-	func placeUnsafe (s: AtomicSheet<Auth>, row: [String], binarySearch: Bool) throws {
+	func placeUnsafe (s: AtomicSheet, row: [String], binarySearch: Bool) throws {
 		if s.data.count < 1 {
 			try append(rows: [self.header, row])
 		} else {

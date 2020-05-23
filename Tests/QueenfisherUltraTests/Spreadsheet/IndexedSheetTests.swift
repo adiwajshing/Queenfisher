@@ -57,21 +57,21 @@ final class IndexedSheetTests: XCTestCase {
 	
 	var db = (1..<100).map { _ in ActivePhoneCall.random() }.sorted()
 	
-	var sheet: IndexedSheet<GoogleServiceAccount, String>!
-	let auth = AuthenticationTests()
+	var sheet: IndexedSheet<String>!
 	let queue: DispatchQueue = .init(label: "serial", attributes: [])
 	
 	func newDB () {
 		db = db.map { _ in ActivePhoneCall.random() }.sorted()
 	}
 	func loadSheetIfRequired () {
-		if auth.acc == nil {
-			try? auth.loadServiceAccount(scope: .sheets)
-		}
 		if sheet == nil {
-			sheet = .init(spreadsheetId: testSpreadsheetId, sheetTitle: sheetTitle,
-						  using: auth.acc, header: ActivePhoneCall.header,
-						  indexer: ActivePhoneCall.indexer, delegate: self)
+			let auth = AuthenticationTests().getFactory(for: .sheets)!
+			sheet = .init(spreadsheetId: testSpreadsheetId,
+						  sheetTitle: sheetTitle,
+						  using: auth,
+						  header: ActivePhoneCall.header,
+						  indexer: ActivePhoneCall.indexer,
+						  delegate: self)
 		}
 	}
 	func testLoadSheet () {

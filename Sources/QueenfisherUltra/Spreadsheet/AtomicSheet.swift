@@ -8,15 +8,14 @@
 import Foundation
 import Promises
 
-public class AtomicSheet <A: Authenticator>: SheetInteractable {
-	public typealias Auth = A
+public class AtomicSheet: SheetInteractable {
 	
 	public let spreadsheetId: String
-	public let authenticator: Auth?
+	public let authenticator: Authenticator?
 	public let sheetTitle: String
-	
 	/// How long after an error should a re-upload be attempted
 	public var reuploadInterval: DispatchTimeInterval = .seconds(30)
+	/// How long to wait after an operation before attempting an upload
 	public var uploadInterval: DispatchTimeInterval = .seconds(1)
 	
 	public weak var delegate: AtomicSheetDelegate?
@@ -28,7 +27,7 @@ public class AtomicSheet <A: Authenticator>: SheetInteractable {
 	private(set) public var data: [[String]] = .init()
 	
 	private var operationQueue = [Sheet.Operation]()
-	var uploading = false
+	internal var uploading = false
 	
 	private let onLoad = Promise<Void>.pending()
 	private var pendingOperationChain: Promise<Void>
@@ -38,7 +37,7 @@ public class AtomicSheet <A: Authenticator>: SheetInteractable {
 	public let queue: DispatchQueue = .global()
 	
 	public init (spreadsheetId: String, sheetTitle: String,
-				 using authenticator: Auth, delegate: AtomicSheetDelegate? = nil) {
+				 using authenticator: Authenticator, delegate: AtomicSheetDelegate? = nil) {
 		self.spreadsheetId = spreadsheetId
 		self.authenticator = authenticator
 		self.sheetTitle = sheetTitle

@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  AccessToken.swift
 //  
 //
 //  Created by Adhiraj Singh on 5/21/20.
@@ -8,7 +8,7 @@
 import Foundation
 import Promises
 
-public struct GoogleAPIKey: Codable, Authenticator {
+public struct AccessToken: Codable, Authenticator {
 	public var accessToken: String
 	/// HTTP token type: bearer, basic etc.
 	public let tokenType: String
@@ -22,14 +22,20 @@ public struct GoogleAPIKey: Codable, Authenticator {
 	/// Check if the API Key has expired
 	public var isExpired: Bool { Date ().timeIntervalSince(expiresIn) > 0 }
 	
-	public func authenticate(scope: GoogleScope) throws -> Promise<GoogleAPIKey> {
+	public func authenticate(scope: GoogleScope) throws -> Promise<AccessToken> {
 		if isExpired {
-			throw GoogleAuthenticationError.init(error: "token expired")
+			throw GoogleAuthenticationError(error: "token expired")
+		} else if !self.scope.contains(scope) {
+			throw GoogleAuthenticationError(error: "invalid scope")
 		} else {
 			return .init(self)
 		}
 	}
-	func with (expiry date: Date) -> GoogleAPIKey {
-		.init(accessToken: accessToken, tokenType: tokenType, scope: scope, refreshToken: refreshToken, expiresIn: date)
+	func with (expiry date: Date) -> AccessToken {
+		.init(accessToken: accessToken,
+			  tokenType: tokenType,
+			  scope: scope,
+			  refreshToken: refreshToken,
+			  expiresIn: date)
 	}
 }

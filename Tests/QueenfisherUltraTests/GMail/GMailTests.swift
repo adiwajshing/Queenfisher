@@ -13,8 +13,8 @@ final class GMailTests: XCTestCase {
 		if gmail != nil {
 			return
 		}
-		XCTAssertNoThrow(try auth.loadOAuthClient())
-		gmail = .init(auth: auth.oauth, email: "me", scope: .mailFullAccess)
+		let auth = AuthenticationTests().getFactory(for: .mailFullAccess)!
+		gmail = .init(auth: auth, email: "me", scope: .mailFullAccess)
 		XCTAssertNoThrow(profile = try await(gmail.profile()))
 	}
 	func sendMessage (text: String, subject: String = "Hello", attachments: [String] = []) -> Promise<GMail.Message> {
@@ -77,8 +77,7 @@ final class GMailTests: XCTestCase {
 	func testParseMessage () {
 		loadIfRequired()
 		var id: String = ""
-		let promise = Promise(())
-			.then(on: queue) { self.gmail.list() }
+		let promise = gmail.list()
 			.then(on: queue) { m -> Promise<Void> in
 				if let messages = m.messages {
 					id = messages[0].id
