@@ -14,9 +14,10 @@ final class AuthenticationTests: XCTestCase {
 		XCTAssertTrue(scope.contains(.sheets))
 		XCTAssertTrue(scope.contains(.mailFullAccess))
 		
-		scope += .mailSend
-		XCTAssertTrue(scope.contains(.mailSend))
-		XCTAssertFalse(scope.contains(.mailSend + .storageRead))
+		scope += .mailCompose
+		XCTAssertTrue(scope.contains(.mailCompose))
+		XCTAssertFalse(scope.contains(.mailCompose + .storageRead))
+		XCTAssertTrue(scope.containsAny(.mailCompose + .storageRead))
 		
 		let encoder = JSONEncoder()
 		let data = try! encoder.encode(scope)
@@ -32,7 +33,7 @@ final class AuthenticationTests: XCTestCase {
 		guard let oauth = oauth else {
 			return
 		}
-		print(oauth.authUrl(for: .mailFullAccess + .sheets))
+		print(oauth.authUrl(for: .mailAll + .sheets))
 		print("login here and return code: ")
 		let code = readLine(strippingNewline: true)!
 		

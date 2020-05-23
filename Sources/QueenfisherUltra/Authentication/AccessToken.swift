@@ -25,7 +25,7 @@ public struct AccessToken: Codable, Authenticator {
 	public func authenticate(scope: GoogleScope) throws -> Promise<AccessToken> {
 		if isExpired {
 			throw GoogleAuthenticationError(error: "token expired")
-		} else if !self.scope.contains(scope) {
+		} else if !self.scope.containsAny(scope) {
 			throw GoogleAuthenticationError(error: "invalid scope")
 		} else {
 			return .init(self)

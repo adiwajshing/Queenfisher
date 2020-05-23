@@ -33,7 +33,7 @@ public class AuthenticationFactory: Authenticator {
 	}
 	
 	public func authenticate (scope: GoogleScope) throws -> Promise<AccessToken> {
-		if !self.scope.contains(scope) {
+		if !self.scope.containsAny(scope) {
 			throw GoogleAuthenticationError(error: "Cannot authenticate for given scope")
 		}
 		

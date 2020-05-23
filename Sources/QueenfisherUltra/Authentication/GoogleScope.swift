@@ -11,9 +11,13 @@ public struct GoogleScope: Codable, RawRepresentable, Equatable, CustomStringCon
 	
 	public static let sheets: Self = .scope ("https://www.googleapis.com/auth/spreadsheets")!
 	public static let storageRead: Self = .scope ("https://www.googleapis.com/auth/devstorage.read_only")!
-	public static let mailSend: Self = .scope ("https://www.googleapis.com/auth/gmail.send")!
+	
+	public static let mailCompose: Self = .scope ("https://www.googleapis.com/auth/gmail.compose")!
 	public static let mailRead: Self = .scope ("https://www.googleapis.com/auth/gmail.readonly")!
-	public static let mailFullAccess: Self = .scope ("https://mail.google.com/")!
+	public static let mailModify: Self = .scope ("https://www.googleapis.com/auth/gmail.modify")!
+	public static let mailFullAccess: Self = .scope("https://mail.google.com/")!
+	public static let mailAll: Self = .mailFullAccess + .mailRead + .mailCompose + .mailModify
+	
 	public static let calender: Self = .scope ("https://www.googleapis.com/auth/calendar")!
 	
 	public var values: Set<URL>
@@ -23,7 +27,7 @@ public struct GoogleScope: Codable, RawRepresentable, Equatable, CustomStringCon
 		values.map { $0.absoluteString }.joined(separator: " ")
 	}
 	public var description: String {
-		"GoogleScope(" + values.map { $0.absoluteString }.joined(separator: ", ") + ")"
+		"GoogleScope(" + values.map { $0.lastPathComponent }.joined(separator: ", ") + ")"
 	}
 	
 	public init (values: Set<URL>) {
@@ -37,6 +41,10 @@ public struct GoogleScope: Codable, RawRepresentable, Equatable, CustomStringCon
 	public func contains (_ scope: Self) -> Bool {
 		scope.values.isSubset(of: values)
 	}
+	public func containsAny (_ scope: Self) -> Bool {
+		scope.values.intersection(scope.values).count > 0
+	}
+	
 	public static func scope (_ urlString: String) -> Self? {
 		if let url = URL(string: urlString) {
 			return .init(values: [url])

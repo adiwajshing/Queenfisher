@@ -12,9 +12,8 @@ let gmailApiUrl = URL(string: "https://www.googleapis.com/gmail/v1/")!
 
 /// Class to access a GMail account
 public class GMail {
-	let auth: Authenticator
-	let userId: String
-	let scope: GoogleScope
+	public let auth: Authenticator
+	public let userId: String
 	
 	var fetchTimer: DispatchSourceTimer!
 	var isFetching = false
@@ -23,13 +22,11 @@ public class GMail {
 	internal(set) public var lastFetchDate = Date(timeIntervalSince1970: 0)
 	
 	let queue: DispatchQueue = .global()
-	
 	lazy var url: URL = { gmailApiUrl.appendingPathComponent("users").appendingPathComponent(userId) }()
 	
-	public init (auth: Authenticator, email userId: String = "me", scope: GoogleScope = .mailFullAccess) {
+	public init (auth: Authenticator, email userId: String = "me") {
 		self.auth = auth
 		self.userId = userId
-		self.scope = scope
 	}
 	/// Marks the specific message as read
 	/// - Parameter id: The id of the specified message
@@ -51,7 +48,8 @@ public class GMail {
 					.appendingPathComponent("modify")
 		return authRequest(on: url,
 						   body: ModificationRequest(addLabelIds: adds, removeLabelIds: removes),
-						   method: "POST")
+						   method: "POST",
+						   scope: .mailModify + .mailFullAccess)
 	}
 	/**
 	Moves the specified message to the trash
@@ -63,7 +61,8 @@ public class GMail {
 						.appendingPathComponent("messages")
 						.appendingPathComponent(id)
 						.appendingPathComponent("trash"),
-					method: "POST")
+					method: "POST",
+					scope: .mailModify + .mailFullAccess)
 	}
 	/**
 	Gets the specified message
@@ -76,7 +75,8 @@ public class GMail {
 		authRequest(on: url.appendingPathComponent("messages").appendingPathComponent(id),
 					body: MessageQuery(format: format,
 									   metadataHeaders: metadataHeaders.count > 0 ? metadataHeaders.joined(separator: ",") : nil),
-					method: "GET")
+					method: "GET",
+					scope: .mailRead + .mailFullAccess)
 	}
 	/**
 	Sends the specified message to the recipients
@@ -87,7 +87,8 @@ public class GMail {
 		authRequest(on: url.appendingPathComponent("messages").appendingPathComponent("send"),
 					body: EncodedMail(raw: message.raw!,
 									  threadId: message.threadId.isEmpty ? "" : message.threadId),
-					method: "POST")
+					method: "POST",
+					scope: .mailCompose)
 	}
 	/// Lists all the unread messages in the user's mailbox
 	public func listUnread () -> Promise<Messages> {
@@ -130,25 +131,26 @@ public class GMail {
 										q: q,
 										maxResults: maxResults,
 										pageToken: pageToken),
-					method: "GET")
+					method: "GET",
+					scope: .mailRead + .mailFullAccess)
 	}
 	
 	public func profile () -> Promise<Profile> {
-		authRequest(on: self.url.appendingPathComponent("profile"), method: "GET")
+		authRequest(on: self.url.appendingPathComponent("profile"), method: "GET", scope: .mailAll)
 	}
 	/// Make an authenticated request to the given URL
-	public func authRequest<E: Encodable, O: Decodable> (on url: URL, body: E, method: String) -> Promise<O> {
+	public func authRequest<E: Encodable, O: Decodable> (on url: URL, body: E, method: String, scope: GoogleScope) -> Promise<O> {
 		Promise(())
-		.then(on: queue) { try self.auth.authenticationHeaders(scope: self.scope) }
+		.then(on: queue) { try self.auth.authenticationHeaders(scope: scope) }
 		.then(on: queue) { try url.httpRequest(headers: $0,
 											   body: body,
 											   method: method,
 											   errorType: Sheet.ErrorResponse.self) }
 	}
 	/// Make an authenticated request to the given URL
-	public func authRequest<O: Decodable> (on url: URL, method: String) -> Promise<O> {
+	public func authRequest<O: Decodable> (on url: URL, method: String, scope: GoogleScope) -> Promise<O> {
 		Promise(())
-		.then(on: queue) { try self.auth.authenticationHeaders(scope: self.scope) }
+		.then(on: queue) { try self.auth.authenticationHeaders(scope: scope) }
 		.then(on: queue) { try url.httpRequest(headers: $0,
 											   method: method,
 											   errorType: Sheet.ErrorResponse.self) }
