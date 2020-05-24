@@ -1,8 +1,10 @@
 import XCTest
 import Promises
-@testable import QueenfisherUltra
+@testable import Queenfisher
 
 final class AuthenticationTests: XCTestCase {
+	
+	static var globalAuth: AuthenticationFactory?
 	
 	var serviceAcc: GoogleServiceAccount!
 	var oauth: GoogleOAuthClient!
@@ -60,15 +62,20 @@ final class AuthenticationTests: XCTestCase {
 		XCTAssertNoThrow(oauth = try .loading(fromJSONAt: testClientFileUrl))
 	}
 	func getFactory (for scope: GoogleScope) -> AuthenticationFactory? {
+		if let global = AuthenticationTests.globalAuth, global.scope.containsAny(scope) {
+			return global
+		}
 		var factory: AuthenticationFactory?
 		if FileManager.default.fileExists(atPath: testApiKeyUrl.path) {
 			loadOAuthClient()
 			if oauth != nil {
 				_ = FileManager.default.contents(atPath: testApiKeyUrl.path)?.debugDescription ?? ""
 				do {
-					factory = try oauth.factory(for: scope,
-												usingAccessToken: .loading(fromJSONAt: testApiKeyUrl))
-					return factory!
+					factory = try oauth.factory(usingAccessToken: .loading(fromJSONAt: testApiKeyUrl))
+					if factory!.scope.containsAny (scope) {
+						AuthenticationTests.globalAuth = factory
+						return factory!
+					}					
 				} catch {
 					
 				}
@@ -78,6 +85,7 @@ final class AuthenticationTests: XCTestCase {
 		print("could not get oauth, loading service account")
 		loadServiceAccount()
 		factory = serviceAcc?.factory(for: scope)
+		AuthenticationTests.globalAuth = factory
 		return factory
 	}
 	

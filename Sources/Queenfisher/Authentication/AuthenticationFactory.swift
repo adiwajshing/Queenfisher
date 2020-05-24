@@ -28,24 +28,27 @@ public class AuthenticationFactory: Authenticator {
 	func fetchToken () throws -> Promise<AccessToken> {
 		print("Renewing API key for \(self.scope)...")
 		return try tokenFactory.fetchToken(for: self.scope)
-			.then(on: self.queue) { $0.with(expiry: Date().addingTimeInterval($0.expiresIn.timeIntervalSince1970)) }
-			.catch(on: self.queue) { _ in self.promise = nil }
+			.then(on: queue) { $0.with(expiry: Date().addingTimeInterval($0.expiresIn.timeIntervalSince1970)) }
+			.catch(on: queue) { [weak self] _ in self?.promise = nil }
 	}
 	
-	public func authenticate (scope: GoogleScope) throws -> Promise<AccessToken> {
+	public func authenticate (scope: GoogleScope) -> Promise<AccessToken> {
 		if !self.scope.containsAny(scope) {
-			throw GoogleAuthenticationError(error: "Cannot authenticate for given scope")
+			return .init( GoogleAuthenticationError(error: "Cannot authenticate for given scope") )
 		}
 		
 		return Promise(())
-		.then(on: queue) { _ -> Promise<AccessToken> in
+		.then(on: queue) { [weak self] _ -> Promise<AccessToken> in
+			guard let self = self else {
+				throw DeinitError.deinitialized
+			}
 			if self.promise == nil {
 				self.promise = try self.fetchToken()
 			}
 			return self.promise!
 		}
-		.then(on: queue) { key -> Promise<AccessToken> in
-			if key.isExpired {
+		.then(on: queue) { [weak self] key -> Promise<AccessToken> in
+			if let self = self, key.isExpired {
 				self.promise = try self.fetchToken()
 				return self.promise!
 			} else {

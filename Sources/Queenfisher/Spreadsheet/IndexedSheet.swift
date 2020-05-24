@@ -100,17 +100,18 @@ public extension IndexedSheet {
 			rowFunction ()
 			.then(on: self.queue) { rows -> Int in
 				// verify list is in sorted order
-				for i in 1..<rows.count {
-					if self.indexer (rows[i]) < self.indexer (rows[i-1]) {
-						throw IndexingError.keysUnordered(rows[i], rows[i-1])
-					}
-					if rows[i].count != self.header.count {
-						throw IndexingError.invalidSizeOfRow(rows[i])
+				if rows.count > 1 {
+					for i in 1..<rows.count {
+						if self.indexer (rows[i]) < self.indexer (rows[i-1]) {
+							throw IndexingError.keysUnordered(rows[i], rows[i-1])
+						}
+						if rows[i].count != self.header.count {
+							throw IndexingError.invalidSizeOfRow(rows[i])
+						}
 					}
 				}
 				
 				var resolutions = 0
-				
 				// if there is no data uploaded, just upload the entire DB
 				if self.data.count <= 1 {
 					try self.clear()

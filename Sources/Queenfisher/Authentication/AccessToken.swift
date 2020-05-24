@@ -22,11 +22,11 @@ public struct AccessToken: Codable, Authenticator {
 	/// Check if the API Key has expired
 	public var isExpired: Bool { Date ().timeIntervalSince(expiresIn) > 0 }
 	
-	public func authenticate(scope: GoogleScope) throws -> Promise<AccessToken> {
+	public func authenticate(scope: GoogleScope) -> Promise<AccessToken> {
 		if isExpired {
-			throw GoogleAuthenticationError(error: "token expired")
+			return .init( GoogleAuthenticationError(error: "token expired") )
 		} else if !self.scope.containsAny(scope) {
-			throw GoogleAuthenticationError(error: "invalid scope")
+			return .init( GoogleAuthenticationError(error: "invalid scope") )
 		} else {
 			return .init(self)
 		}

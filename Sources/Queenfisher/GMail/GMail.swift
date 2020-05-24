@@ -140,8 +140,7 @@ public class GMail {
 	}
 	/// Make an authenticated request to the given URL
 	public func authRequest<E: Encodable, O: Decodable> (on url: URL, body: E, method: String, scope: GoogleScope) -> Promise<O> {
-		Promise(())
-		.then(on: queue) { try self.auth.authenticationHeaders(scope: scope) }
+		auth.authenticationHeaders(scope: scope)
 		.then(on: queue) { try url.httpRequest(headers: $0,
 											   body: body,
 											   method: method,
@@ -149,8 +148,7 @@ public class GMail {
 	}
 	/// Make an authenticated request to the given URL
 	public func authRequest<O: Decodable> (on url: URL, method: String, scope: GoogleScope) -> Promise<O> {
-		Promise(())
-		.then(on: queue) { try self.auth.authenticationHeaders(scope: scope) }
+		auth.authenticationHeaders(scope: scope)
 		.then(on: queue) { try url.httpRequest(headers: $0,
 											   method: method,
 											   errorType: Sheet.ErrorResponse.self) }
@@ -167,16 +165,16 @@ public class GMail {
 	}
 	public struct Messages: Codable {
 		public struct MessageMeta: Codable {
-			var id: String
-			var threadId: String
+			public var id: String
+			public var threadId: String
 		}
 		/// List of messages. Note that each message resource contains only an `id` and a `threadId`.
 		/// Additional message details can be fetched using the messages.get method.
-		let messages: [MessageMeta]?
+		public let messages: [MessageMeta]?
 		/// Token to retrieve the next page of results in the list. (nil when its the last page)
-		let nextPageToken: String?
+		public let nextPageToken: String?
 		/// Estimated total number of results.
-		let resultSizeEstimate: Int
+		public let resultSizeEstimate: Int
 	}
 	public struct Profile: Codable {
 		public var emailAddress: String
@@ -202,9 +200,7 @@ public class GMail {
 		var threadId: String?
 	}
 	struct ModificationRequest: Codable {
-		/// A list of IDs of labels to add to this message.
 		var addLabelIds: [String]
-		/// A list IDs of labels to remove from this message.
 		var removeLabelIds: [String]
 	}
 }

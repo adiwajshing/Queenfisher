@@ -8,9 +8,9 @@
 import Foundation
 
 /// url for attachments
-let testAttachmentsUrl = URL(fileURLWithPath: "/Users/adhirajsingh/Desktop/PROJECTS/XCode/QueenfisherUltra/Tests/QueenfisherUltraTests/TestAttachments")
+let testAttachmentsUrl = URL(fileURLWithPath: "/Users/adhirajsingh/Desktop/PROJECTS/XCode/Queenfisher/Tests/QueenfisherTests/TestAttachments")
 /// url for credentials folder
-let testUrl = URL(fileURLWithPath: "/Users/adhirajsingh/Desktop/PROJECTS/XCode/QueenfisherUltra/Tests/QueenfisherUltraTests/Keys")
+let testUrl = URL(fileURLWithPath: "/Users/adhirajsingh/Desktop/PROJECTS/XCode/Queenfisher/Tests/QueenfisherTests/Keys")
 
 /// file for test service account credentials
 let testCredsFileUrl = testUrl.appendingPathComponent("service_acc_creds.json")

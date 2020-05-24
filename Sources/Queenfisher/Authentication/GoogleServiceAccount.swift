@@ -38,7 +38,7 @@ public class GoogleServiceAccount: Codable, AccessTokenFactory {
 	/// URL to request authentication from
 	public let tokenUri: URL
 	
-	public func factory (for scope: GoogleScope) -> AuthenticationFactory {
+	public func factory (forScope scope: GoogleScope) -> AuthenticationFactory {
 		.init(scope: scope, using: self)
 	}
 	public func fetchToken (for scope: GoogleScope) throws -> Promise<AccessToken> {

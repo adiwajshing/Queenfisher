@@ -18,20 +18,20 @@ public protocol Authenticator {
 	- Parameter scope: the authentication scope for which you require an authentication key
 	- Returns: a valid API key for the requested scope
 	*/
-	func authenticate (scope: GoogleScope) throws -> Promise<AccessToken>
+	func authenticate (scope: GoogleScope) -> Promise<AccessToken>
 }
 public extension Authenticator {
 	/// Authenticate & return the authorization headers required to make an HTTP request
-	func authenticationHeaders (scope: GoogleScope) throws -> Promise<[String:String]> {
-		try authenticate(scope: scope)
-			.then (on: .global()) { ["authorization": "\($0.tokenType) \($0.accessToken)"] }
+	func authenticationHeaders (scope: GoogleScope) -> Promise<[String:String]> {
+		authenticate(scope: scope)
+		.then (on: .global()) { ["authorization": "\($0.tokenType) \($0.accessToken)"] }
 	}
 }
 struct GoogleAuthenticationError: Error, Codable {
 	let error: String
 }
 
-extension Decodable {
+public extension Decodable {
 	
 	static func loading (fromJSONAt url: URL) throws -> Self {
 		let data = try Data (contentsOf: url)

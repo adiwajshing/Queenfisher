@@ -9,9 +9,14 @@ import Foundation
 
 public extension GMail {
 	/// Address of the sender or receiver of a mail
-	enum Address: RawRepresentable {
-		case email (String)
-		case namedEmail (String, String)
+	struct Address: RawRepresentable {
+		public var name: String?
+		public var email: String
+		
+		init (name: String?, email: String) {
+			self.name = name
+			self.email = email
+		}
 		
 		/// Parse an address from a string
 		public init?(rawValue: String) {
@@ -40,21 +45,15 @@ public extension GMail {
 		/// just the email in case of .email.
 		/// Name <EMail> in case of .namedEmail
 		public var rawValue: String {
-			switch self {
-			case .email(let email):
-				return email
-			case .namedEmail(let name, let email):
-				return "\(name) <\(email)>"
-			}
+			name != nil ? "\(name!) <\(email)>" : email
 		}
-		/// The email address
-		public var email: String {
-			switch self {
-			case .email(let email):
-				return email
-			case .namedEmail(_, let email):
-				return email
-			}
+		/// Address with just an email
+		static func email (_ str: String) -> Address {
+			.init (name: nil, email: str)
+		}
+		/// Address with a name & email
+		static func namedEmail (_ name: String, _ str: String) -> Address {
+			.init (name: name, email: str)
 		}
 	}
 	

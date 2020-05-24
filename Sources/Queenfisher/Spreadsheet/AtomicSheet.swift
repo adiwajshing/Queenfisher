@@ -215,10 +215,10 @@ public class AtomicSheet: SheetInteractable {
 		
 		if ops.first!.load == true {
 			workTill = 1
-			promise = try self.load()
+			promise = load()
 		} else {
 			workTill = index
-			promise = try batchUpdate(operations: .init(requests: ops)).then(on: queue) { _ in }
+			promise = batchUpdate(operations: .init(requests: ops)).then(on: queue) { _ in }
 		}
 		
 		let workedOps = Array(ops[0..<workTill])
@@ -235,14 +235,14 @@ public class AtomicSheet: SheetInteractable {
 				self.scheduleUpload(in: self.reuploadInterval)
 			}
 	}
-	private func load () throws -> Promise<Void> {
+	private func load () -> Promise<Void> {
 		var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)!
 		comps.queryItems = [
 			URLQueryItem(name: "fields", value: "sheets.properties,sheets.data.rowData.values.userEnteredValue"),
 			URLQueryItem(name: "ranges", value: sheetTitle),
 		]
 		let url = comps.url!
-		return try authenticating()
+		return authenticating()
 			.then(on: queue) { try url.httpRequest(headers: $0, decoder: JSONDecoder(), errorType: Sheet.ErrorResponse.self) }
 			.recover(on: queue) { err throws -> SheetsObject in
 				if let error = err as? Sheet.ErrorResponse, error.error.code == 400 {
@@ -254,7 +254,7 @@ public class AtomicSheet: SheetInteractable {
 				if let sheet = sheets.sheets.first {
 					return .init(sheet)
 				} else {
-					return try self.batchUpdate(.addSheet(title: self.sheetTitle, grid: nil))
+					return self.batchUpdate(.addSheet(title: self.sheetTitle, grid: nil))
 						.then(on: self.queue) { Sheet(properties: $0.replies.first!.addSheet!.properties!, data: nil) }
 				}
 			}
@@ -267,7 +267,7 @@ public class AtomicSheet: SheetInteractable {
 				return .init(())
 			}
 	}
-	
+
 	private struct SheetsObject: Codable {
 		let sheets: [Sheet]
 	}

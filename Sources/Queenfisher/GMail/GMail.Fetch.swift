@@ -44,10 +44,12 @@ public extension GMail {
 			let lastFetchEpoch = Int(lastFetchDate.timeIntervalSince1970)
 			query += "after:\(lastFetchEpoch)"
 		}
-		lastFetchDate = Date()
 		
 		listAll(q: query)
-		.then(on: queue) { $0.messages ?? [] }
+		.then(on: queue) { m -> [GMail.Messages.MessageMeta] in
+			self.lastFetchDate = Date()
+			return m.messages ?? []
+		}
 		.then(on: queue) { all(on: self.queue, $0.map { self.get(id: $0.id, format: .full) }) }
 		.then(on: queue) { onUnreadMessages(.success($0)) }
 		.catch(on: queue) { onUnreadMessages(.failure($0)) }

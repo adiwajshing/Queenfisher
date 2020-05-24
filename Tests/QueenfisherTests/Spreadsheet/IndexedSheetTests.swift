@@ -1,100 +1,49 @@
 import XCTest
 import Promises
-@testable import QueenfisherUltra
+@testable import Queenfisher
 
 final class IndexedSheetTests: XCTestCase {
 	
-	struct ActivePhoneCall: Comparable {
-		static func < (lhs: IndexedSheetTests.ActivePhoneCall, rhs: IndexedSheetTests.ActivePhoneCall) -> Bool {
-			if lhs.startOfCall < rhs.startOfCall {
-				return true
-			} else if lhs.startOfCall > rhs.startOfCall {
-				return false
-			} else {
-				return lhs.fromNumber < rhs.fromNumber
-			}
-		}
-		
-		var startOfCall: Date
-		/// 10 digit phone number of caller
-		var fromNumber: String
-		/// 10 digit phone number of receiver
-		var toNumber: String
-		
-		static func random () -> ActivePhoneCall {
-			let from = (1000000000...9999999999).randomElement()!
-			let to   = (1000000000...9999999999).randomElement()!
-			let start = Date(timeIntervalSinceReferenceDate: Double.random(in: -10000...1000000))
-			return .init(startOfCall: start, fromNumber: String(from), toNumber: String(to))
-		}
-		
-		static let dateFormatter: DateFormatter = {
-			let formatter = DateFormatter ()
-			formatter.dateFormat = "yy/MM/dd hh:mm:ss a"
-			return formatter
-		}()
-		static let indexer: (([String]) -> String) = {
-			String(format: "%08X", UInt32(ActivePhoneCall.dateFormatter.date(from: $0[0])!.timeIntervalSince1970))
-			+ $0[1]
-		}
-		static let header: [String] = ["Conversation Start", "From", "To"]
-		
-		func dbKey () -> String {
-			String(format: "%08X", UInt32(startOfCall.timeIntervalSince1970)) + fromNumber
-		}
-		
-		func row () -> [String] {
-			[
-				ActivePhoneCall.dateFormatter.string(from: startOfCall),
-				fromNumber,
-				toNumber
-			]
-		}
-		
-	}
-	
-	let sheetTitle = "ActiveNumbersTest"
-	
 	var db = (1..<100).map { _ in ActivePhoneCall.random() }.sorted()
+	let sheetTitle = ActivePhoneCall.sheetTitle
 	
 	var sheet: IndexedSheet<String>!
 	let queue: DispatchQueue = .init(label: "serial", attributes: [])
 	
+	override func setUp() {
+		let auth = AuthenticationTests().getFactory(for: .sheets)!
+		sheet = .init(spreadsheetId: testSpreadsheetId,
+					  sheetTitle: sheetTitle,
+					  using: auth,
+					  header: ActivePhoneCall.header,
+					  indexer: ActivePhoneCall.indexer,
+					  delegate: self)
+	}
+	override func tearDown() {
+		sheet = nil
+	}
+	
 	func newDB () {
 		db = db.map { _ in ActivePhoneCall.random() }.sorted()
 	}
-	func loadSheetIfRequired () {
-		if sheet == nil {
-			let auth = AuthenticationTests().getFactory(for: .sheets)!
-			sheet = .init(spreadsheetId: testSpreadsheetId,
-						  sheetTitle: sheetTitle,
-						  using: auth,
-						  header: ActivePhoneCall.header,
-						  indexer: ActivePhoneCall.indexer,
-						  delegate: self)
-		}
-	}
 	func testLoadSheet () {
-		loadSheetIfRequired()
-		XCTAssertNoThrow(_ = try await (sheet.get().then(on: .global()) { print($0) } ))
+		XCTAssertNoThrow(_ = try await (sheet.get().then(on: queue) { print($0) } ))
 	}
 	func synchronize () -> Promise<Int> {
-		loadSheetIfRequired()
 		let dbFunc = {
 			Promise(())
-			.delay(on: .global(), 3) // delay to simulate delay in loading a DB
+			.delay(on: self.queue, 3) // delay to simulate delay in loading a DB
 			.then(on: self.queue) { self.db.map { $0.row() } }
 		}
 		return sheet.synchronize(with: dbFunc)
 	}
 	func testSynchronize () {
-		XCTAssertNoThrow(try await( synchronize() ))
-		assertMatch()
-		
-		newDB()
-		// check that it synchronizes correctly even if the DB is completely different
-		XCTAssertNoThrow(try await( synchronize() ))
-		assertMatch()
+		// check that it synchronizes correctly even when the sheet is empty & when the DB is completely different
+		for _ in 0..<2 {
+			newDB()
+			XCTAssertNoThrow(try await( synchronize() ))
+			assertMatch()
+		}
 	}
 	
 	func executeManyOperations () {
@@ -127,18 +76,18 @@ final class IndexedSheetTests: XCTestCase {
 					}
 					break
 				}
+				promise.then(on: queue) {  }
 			}
 		}
 	}
 	
 	func testManyOperations () {
 		_ = synchronize()
-		// once before synchronization is done
-		executeManyOperations()
-		assertMatch()
-		// once after synchronization is done
-		executeManyOperations()
-		assertMatch()
+		// test twice, once before synchronization is done & once after
+		for _ in 0..<2 {
+			executeManyOperations()
+			assertMatch()
+		}
 		// check that the DB is in perfect health, and no discrepancies exist
 		XCTAssertNoThrow( try await(synchronize()) == 0 )
 	}
@@ -176,7 +125,7 @@ final class IndexedSheetTests: XCTestCase {
 		
 		XCTAssertNoThrow(
 			try await(
-				try sheet.read(sheet: sheetTitle)
+				sheet.read(sheet: sheetTitle)
 				.then(on: .global()) {
 					let rows = [ ActivePhoneCall.header ] + self.db.map { $0.row() }
 					XCTAssertEqual(rows.count, $0.values?.count)

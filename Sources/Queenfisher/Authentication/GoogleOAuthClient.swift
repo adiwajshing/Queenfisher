@@ -59,16 +59,13 @@ public struct GoogleOAuthClient: Codable, AccessTokenFactory {
 									  grantType: .refreshToken)
 		return try oAuthApiUrl.httpRequest(headers: [:], body: req, errorType: GoogleAuthenticationError.self)
 	}
-	public func factory(for scope: GoogleScope, usingAccessToken token: AccessToken) throws -> AuthenticationFactory {
+	public func factory(usingAccessToken token: AccessToken) throws -> AuthenticationFactory {
 		guard let _ = token.refreshToken else {
-			throw GoogleAuthenticationError.init(error: "refresh token absent")
-		}
-		guard token.scope.contains(scope) else {
-			throw GoogleAuthenticationError.init(error: "token does not contain required scopes")
+			throw GoogleAuthenticationError(error: "refresh token absent")
 		}
 		var client = self
 		client.factoryToken = token
-		return .init(scope: scope, using: client)
+		return .init(scope: token.scope, using: client)
 	}
 	
 	struct OAuthRequest: Codable {

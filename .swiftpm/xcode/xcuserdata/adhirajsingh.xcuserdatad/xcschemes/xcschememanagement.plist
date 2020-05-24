@@ -4,14 +4,29 @@
 <dict>
 	<key>SchemeUserState</key>
 	<dict>
-		<key>QueenfisherUltra.xcscheme_^#shared#^_</key>
+		<key>Queenfisher.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
 			<integer>0</integer>
 		</dict>
+		<key>QueenfisherUltra.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>1</integer>
+		</dict>
 	</dict>
 	<key>SuppressBuildableAutocreation</key>
 	<dict>
+		<key>Queenfisher</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>QueenfisherTests</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
 		<key>QueenfisherUltra</key>
 		<dict>
 			<key>primary</key>

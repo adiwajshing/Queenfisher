@@ -1,6 +1,6 @@
 import XCTest
 import Promises
-@testable import QueenfisherUltra
+@testable import Queenfisher
 
 final class GMailTests: XCTestCase {
 	var gmail: GMail!
@@ -9,14 +9,15 @@ final class GMailTests: XCTestCase {
 	
 	let queue: DispatchQueue = .global()
 	
-	func loadIfRequired () {
-		if gmail != nil {
-			return
-		}
+	override func setUp() {
 		let auth = AuthenticationTests().getFactory(for: .mailCompose + .mailRead + .mailModify)!
-		gmail = .init(auth: auth, email: "me")
+		gmail = .init(auth: auth)
 		XCTAssertNoThrow(profile = try await(gmail.profile()))
 	}
+	override func tearDown() {
+		gmail = nil
+	}
+	/// Sends an email to oneself
 	func sendMessage (text: String, subject: String = "Hello", attachments: [String] = []) -> Promise<GMail.Message> {
 		let urls = attachments.map { testAttachmentsUrl.appendingPathComponent($0) }
 		let message: GMail.Message = .init(from: .namedEmail("Me", profile.emailAddress),
@@ -28,21 +29,19 @@ final class GMailTests: XCTestCase {
 	}
 	/// gets the first unread message in the inbox or creates one lol
 	func getAnUnreadMessage () -> Promise<GMail.Message> {
-		loadIfRequired()
-		return self.gmail.listUnread()
-			.then(on: queue) { m -> Promise<GMail.Message> in
-				if let messages = m.messages {
-					return self.gmail.get(id: messages.first!.id)
-				} else {
-					print ("creating unread message")
-					return self.sendMessage(text: "this is a test")
-						.then(on: self.queue) { _ in self.gmail.list(q: "is:unread", maxResults: 1) }
-						.then(on: self.queue) { self.gmail.get(id: $0.messages!.first!.id) }
-				}
+		gmail.listUnread()
+		.then(on: queue) { m -> Promise<GMail.Message> in
+			if let messages = m.messages {
+				return self.gmail.get(id: messages.first!.id)
+			} else {
+				print ("creating unread message")
+				return self.sendMessage(text: "this is a test")
+					.then(on: self.queue) { _ in self.gmail.list(q: "is:unread", maxResults: 1) }
+					.then(on: self.queue) { self.gmail.get(id: $0.messages!.first!.id) }
 			}
+		}
 	}
 	func testProfile () {
-		loadIfRequired()
 		if profile != nil {
 			print("Oh hello " + profile.emailAddress)
 		}
@@ -55,9 +54,7 @@ final class GMailTests: XCTestCase {
 		XCTAssertNoThrow( try await(promise) )
 	}
 	func testMessages () {
-		loadIfRequired()
-		let promise = Promise(())
-			.then(on: queue) { self.gmail.list() }
+		let promise = gmail.list()
 			.then(on: queue) { print ("\($0.resultSizeEstimate) messages loaded") }
 			.then(on: queue) { self.gmail.listUnread() }
 			.then(on: queue) { print ("\($0.resultSizeEstimate) unread messages loaded") }
@@ -65,7 +62,6 @@ final class GMailTests: XCTestCase {
 		XCTAssertNoThrow( try await(promise) )
 	}
 	func testTrash () {
-		loadIfRequired()
 		var id: String = ""
 		let promise = sendMessage(text: "some <i>HTML</i> text here")
 			.then(on: queue) { _ in self.gmail.list() }
@@ -77,7 +73,6 @@ final class GMailTests: XCTestCase {
 		XCTAssertNoThrow( try await(promise) )
 	}
 	func testParseMessage () {
-		loadIfRequired()
 		var id: String = ""
 		let promise = gmail.list()
 			.then(on: queue) { m -> Promise<Void> in
@@ -99,7 +94,6 @@ final class GMailTests: XCTestCase {
 				}
 				XCTAssertNotNil($0.from)
 				XCTAssertNotNil($0.to)
-				XCTAssertNotNil($0.cc)
 				print ("full message received & parsed correctly")
 				return .init(())
 			}
@@ -119,7 +113,6 @@ final class GMailTests: XCTestCase {
 		XCTAssertNoThrow( try await(promise) )
 	}
 	func testReplyToMessage () {
-		loadIfRequired()
 		var ogMail: GMail.Message!
 		let promise = sendMessage(text: "I am v <b>certain<b/> this email will get a reply",
 								  subject: "Cool Subject",
@@ -128,12 +121,12 @@ final class GMailTests: XCTestCase {
 			.then(on: queue) { self.gmail.get(id: ogMail.id, format: .metadata) }
 			.delay(on: queue, 2)
 			.then(on: queue) { self.gmail.send(message: GMail.Message(replyingTo: $0,
+																	  fromMe: true,
 																	  text: "Wow you were right, wow")!) }
 			.then(on: queue) { XCTAssertEqual($0.threadId, ogMail.threadId) }
 		XCTAssertNoThrow( try await(promise) )
 	}
 	func testSendMessage () {
-		loadIfRequired()
 		let subject = "This is a test mail with attachments"
 		let promise = sendMessage(text: "I have gif for you. Look at <i>HTML<i/> <b>bold</b> text",
 								  subject: subject,
@@ -149,8 +142,6 @@ final class GMailTests: XCTestCase {
 		
 	}
 	func testMailFetch () {
-		loadIfRequired()
-		
 		XCTAssertNoThrow(try await(getAnUnreadMessage()))
 		
 		var firstBatch: [GMail.Message]!
