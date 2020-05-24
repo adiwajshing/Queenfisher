@@ -9,7 +9,7 @@
 
 ## Installing
 
-1. Queenfisher is written in Swift 5, so you need either **XCode 11** or **Swift 5.0** installed on your system.
+1. Queenfisher is written in Swift 5.2, so you need either **XCode 11.4** or **Swift 5.2** installed on your system.
 2. Add Queenfisher to your swift package: 
 ``` swift
 	...
@@ -30,7 +30,7 @@
 ## Authenticating with Google
 
 1. Before you can use these APIs, you need to have a project setup on Google Cloud Platform, you can create one [here](https://console.developers.google.com/projectcreate). 
-2. Once you have a project setup, you must enable the APIs you want to use. **Queenfisher** currently wraps around the [GMail](https://developers.google.com/gmail/api/v1/reference) & [Sheets]() API, so you can enable either or both.
+2. Once you have a project setup, you must enable the APIs you want to use. **Queenfisher** currently wraps around the [GMail](https://developers.google.com/gmail/api/v1/reference) & [Sheets](https://developers.google.com/sheets/api/reference/rest) API, so you can enable either or both.
 3. To authenticate using [O-Auth](https://developers.google.com/identity/protocols/oauth2/web-server)
 	- Create & download your client secret, learn how to do that [here](https://developers.google.com/identity/protocols/oauth2/web-server#creatingcred).
 	- Store the downloaded JSON somewhere nice & safe.
@@ -87,7 +87,7 @@
 	*/
 	```
 	
-## Accessing GMail
+## GMail API
 
 - Create an instance
 	``` swift
@@ -194,6 +194,94 @@
 		.then (on: .global()) { print ("yay modified mail with ID: \($0.id)") }
 	```
 
-## Sheets
+## Sheets API
 
-Haven't documented it yet :/
+- [Getting](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/get) a Spreadsheet:
+	``` swift
+	import Queenfisher
+	import Promises
+
+	// create an authentication factory using the access token & secret
+	// make sure your token has access to GMail
+	// do note, service accounts cannot access GMail unless with GSuite accounts
+	let client: GoogleOAuthClient = try .loading(from: pathToSecret)
+	let authFactory = try client.factory(usingAccessToken: .loading(fromJSONAt: pathToToken))
+	
+	let spreadsheet: Spreadsheet = try await(.get("abcdefghi", using: authFactory))
+	print("Got spreadsheet '\(spreadsheet.properties.title)', sheets: \(spreadsheet.sheets.map({$0.properties.title}))") 
+	```
+- [Writing](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#updatecellsrequest) rows to a spreadsheet:
+	``` swift
+	// get the sheet ID, it's the unique ID for every sheet, you'll need it for almost all operations
+	let sheetId = spreadsheet.sheet (forTitle: "Sheet 1")!.properties.sheetId!
+	
+	let rows = [
+		["hello", "this", "is", "jeff"],
+		["yes", "my", "name", "jeff"],
+		["of course", "this", "is", "jeff"]
+	]
+	// write these rows to the start of the spreadsheet
+	spreadsheet.writeRows (sheetId: sheetId, rows: rows, starting: .cell(0,0))
+	.then (on: .global()) { _ in print ("yay done") }
+	```
+- [Appending](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#appendcellsrequest) rows to a spreadsheet:
+	``` swift
+	// get the sheet ID, it's the unique ID for every sheet, you'll need it for almost all operations
+	let sheetId = spreadsheet.sheet (forTitle: "Sheet 1")!.properties.sheetId!
+	
+	let rows = [
+		["wow", "more", "rows", "!"],
+		["yes", "this", "is", "great"]
+	]
+	// append these rows after the last row with data in the sheet
+	spreadsheet.appendRows (sheetId: sheetId, rows: rows)
+	.then (on: .global()) { _ in print ("yay done") }
+	```
+- [Reading](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/get) from a spreadsheet:
+	``` swift
+	let sheetId = spreadsheet.sheet (forTitle: "Sheet 1")!.properties.sheetId!
+	
+	spreadsheet.read (sheetId: sheetId)
+	.then (on: .global()) { print ("\($0.values)") }
+	
+	/* or if you want to read a specific range */
+	spreadsheet.read (sheetId: sheetId, range: (.row(1), .row(5))) // read all columns from row 2 to 6
+	.then (on: .global()) { print ("\($0.values)") }
+	```
+- [Inserting](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#insertdimensionrequest) empty rows/columns into a sheet:
+	``` swift
+	spreadsheet.insert(sheetId: sheetId, range: 2..<4, dimension: .columns) // insert 2 columns at index 2
+	.then (on: .global()) { _ in print ("yay inserted") }
+	```
+- [Appending](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#appenddimensionrequest) empty rows/columns into a sheet:
+	``` swift
+	spreadsheet.append(sheetId: sheetId, size: 3, dimension: .columns) // append 3 columns
+	.then (on: .global()) { _ in print ("yay appended") }
+	```
+- [Moving](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#movedimensionrequest) rows/columns in a sheet:
+	``` swift
+	spreadsheet.move(sheetId: sheetId, range: 2..<3, to: 2, to: 1, dimension: .rows) // move rows 2-3 to index 1
+	.then (on: .global()) { _ in print ("yay moved") }
+	```
+- [Deleting](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#deletedimensionrequest) rows/columns in a sheet:
+	``` swift
+	spreadsheet.delete(sheetId: sheetId, range: 2..<3, to: 2, dimension: .rows) // deletes rows at indexes 2-3
+	.then (on: .global()) { _ in print ("yay deleted") }
+	```
+- [Adding](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#addsheetrequest) rows/columns in a sheet:
+	``` swift
+	spreadsheet.create(title: "Name of the sheet", dimensions: .init(rowCount: 10, columnCount: 5))
+	.then (on: .global()) { print ("yay created with ID: \($0.replies.first!.addSheet!.properties!.sheetId)") }
+	```
+- [Deleting](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#deletesheetrequest) a sheet from a spreadsheet:
+	``` swift
+	spreadsheet.delete(sheetId: sheetId)
+	.then (on: .global()) { _ in print ("yay deleted") }
+	```
+- [Clearing](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#updatecellsrequest) a sheet:
+	``` swift
+	spreadsheet.clear(sheetId: sheetId) // will delete all data in the sheet
+	.then (on: .global()) { _ in print ("yay cleared") }
+	```
+	
+Haven't documented IndexedSheet & AtomicSheet yet :/

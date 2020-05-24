@@ -26,7 +26,7 @@ public class AtomicSheet: SheetInteractable {
 	private(set) public var end: Sheet.Location = .cell(0, 0)
 	private(set) public var data: [[String]] = .init()
 	
-	private var operationQueue = [Sheet.Operation]()
+	private var operationQueue = [Spreadsheet.Operation]()
 	internal var uploading = false
 	
 	private let onLoad = Promise<Void>.pending()
@@ -186,7 +186,7 @@ public class AtomicSheet: SheetInteractable {
 	public func clear () throws {
 		try operate(op: .clear(sheetId: sheetId)) { data.removeAll() }
 	}
-	func operate (op: Sheet.Operation, _ exec: () throws -> Void) throws {
+	func operate (op: Spreadsheet.Operation, _ exec: () throws -> Void) throws {
 		try exec ()
 		operationQueue.append(op)
 	}
@@ -209,7 +209,7 @@ public class AtomicSheet: SheetInteractable {
 			}
 		}
 	}
-	private func upload (till index: Int, ops: [Sheet.Operation]) throws -> Promise<Int> {
+	private func upload (till index: Int, ops: [Spreadsheet.Operation]) throws -> Promise<Int> {
 		let workTill: Int
 		let promise: Promise<Void>
 		
@@ -243,9 +243,9 @@ public class AtomicSheet: SheetInteractable {
 		]
 		let url = comps.url!
 		return authenticating()
-			.then(on: queue) { try url.httpRequest(headers: $0, decoder: JSONDecoder(), errorType: Sheet.ErrorResponse.self) }
+			.then(on: queue) { try url.httpRequest(headers: $0, decoder: JSONDecoder(), errorType: ErrorResponse.self) }
 			.recover(on: queue) { err throws -> SheetsObject in
-				if let error = err as? Sheet.ErrorResponse, error.error.code == 400 {
+				if let error = err as? ErrorResponse, error.error.code == 400 {
 					return SheetsObject(sheets: [])
 				}
 				throw err
@@ -277,7 +277,7 @@ public enum OperationError: Error {
 	case invalidMove
 }
 public protocol AtomicSheetDelegate: class {
-	func uploadWillBegin (_ sheet: String, operations: [Sheet.Operation])
-	func uploadDidSucceed (_ sheet: String, operations: [Sheet.Operation])
-	func uploadDidFail (_ sheet: String, operations: [Sheet.Operation], error: Error)
+	func uploadWillBegin (_ sheet: String, operations: [Spreadsheet.Operation])
+	func uploadDidSucceed (_ sheet: String, operations: [Spreadsheet.Operation])
+	func uploadDidFail (_ sheet: String, operations: [Spreadsheet.Operation], error: Error)
 }

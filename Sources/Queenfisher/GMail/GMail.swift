@@ -144,14 +144,14 @@ public class GMail {
 		.then(on: queue) { try url.httpRequest(headers: $0,
 											   body: body,
 											   method: method,
-											   errorType: Sheet.ErrorResponse.self) }
+											   errorType: ErrorResponse.self) }
 	}
 	/// Make an authenticated request to the given URL
 	public func authRequest<O: Decodable> (on url: URL, method: String, scope: GoogleScope) -> Promise<O> {
 		auth.authenticationHeaders(scope: scope)
 		.then(on: queue) { try url.httpRequest(headers: $0,
 											   method: method,
-											   errorType: Sheet.ErrorResponse.self) }
+											   errorType: ErrorResponse.self) }
 	}
 	public enum MessageFormat: String, Codable {
 		/// Returns the full email message data with body content parsed in the payload field

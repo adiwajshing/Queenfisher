@@ -9,7 +9,7 @@ import Foundation
 import Promises
 
 let sheetsApiUrl = URL (string: "https://sheets.googleapis.com/v4/spreadsheets/")!
-
+/// Generic Spreadsheet with functions to batch update
 public protocol SheetInteractable {
 	var spreadsheetId: String {get}
 	var authenticator: Authenticator? {get}
@@ -18,8 +18,8 @@ public protocol SheetInteractable {
 public extension SheetInteractable {
 	
 	var url: URL { sheetsApiUrl.appendingPathComponent(spreadsheetId) }
-
-	func write (sheet: String? = nil, data: [[String]], starting from: Sheet.Location, dimension: Sheet.Dimension) -> Promise<Sheet.WriteResponse> {
+	/// Write Columned or Rowed data to the sheet
+	func write (sheet: String? = nil, data: [[String]], starting from: Sheet.Location, dimension: Sheet.Dimension) -> Promise<Spreadsheet.WriteResponse> {
 		let range = (sheet != nil ? "\(sheet!)!" : "") + from.celled().description
 		
 		var url = self.url.appendingPathComponent("values").appendingPathComponent(range)
@@ -32,8 +32,9 @@ public extension SheetInteractable {
 			.then (on: queue) { try url.httpRequest(headers: $0,
 													body: body,
 													method: "PUT",
-													errorType: Sheet.ErrorResponse.self) }
+													errorType: ErrorResponse.self) }
 	}
+	/// Read a sheet
 	func read (sheet: String? = nil, range: (from: Sheet.Location, to: Sheet.Location)? = nil) -> Promise<Sheet.ValuesRange> {
 		var url = self.url.appendingPathComponent("values")
 		if var sheetComp = sheet {
@@ -43,18 +44,18 @@ public extension SheetInteractable {
 			url.appendPathComponent(sheetComp)
 		}
 		return authenticating()
-			.then(on: queue) { try url.httpRequest(headers: $0, errorType: Sheet.ErrorResponse.self) }
+			.then(on: queue) { try url.httpRequest(headers: $0, errorType: ErrorResponse.self) }
 	}
-	func batchUpdate (_ operation: Sheet.Operation) -> Promise<Sheet.UpdateResponse> {
+	func batchUpdate (_ operation: Spreadsheet.Operation) -> Promise<Spreadsheet.UpdateResponse> {
 		batchUpdate(operations: .init(operation))
 	}
-	func batchUpdate (operations: Sheet.Operations) -> Promise<Sheet.UpdateResponse> {
+	func batchUpdate (operations: Spreadsheet.Operations) -> Promise<Spreadsheet.UpdateResponse> {
 		let url = sheetsApiUrl.appendingPathComponent(spreadsheetId + ":batchUpdate")
 		return authenticating()
 		.then (on: queue) { try url.httpRequest(headers: $0,
 												body: operations,
 												method: "POST",
-												errorType: Sheet.ErrorResponse.self) }
+												errorType: ErrorResponse.self) }
 	}
 	internal func authenticating () -> Promise<[String:String]> {
 		authenticator!.authenticationHeaders(scope: .sheets)

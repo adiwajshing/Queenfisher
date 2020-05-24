@@ -7,7 +7,6 @@
 
 import Foundation
 import Promises
-import SwiftJWT
 
 /// Abstract protocol that offers a way to provide a AccessToken
 public protocol Authenticator {

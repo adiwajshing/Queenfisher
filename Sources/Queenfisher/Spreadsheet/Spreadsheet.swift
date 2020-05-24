@@ -31,20 +31,19 @@ public class Spreadsheet: SheetInteractable, Decodable {
 		let url = sheetsApiUrl.appendingPathComponent(spreadsheetId)
 		let queue: DispatchQueue = .global()
 		return authenticator.authenticationHeaders(scope: .sheets)
-		.then(on: queue) { try url.httpRequest(headers: $0,
-											   method: "GET",
-											   errorType: Sheet.ErrorResponse.self) }
+		.then(on: queue) { try url.httpRequest(headers: $0, method: "GET", errorType: ErrorResponse.self) }
 		.then(on: queue) { $0.authenticator = authenticator }
 	}
 	/// Get the sheet for the specified `title`
 	public func sheet (forTitle title: String) -> Sheet? {
 		sheets.first(where: {$0.properties.title == title})
 	}
-	
-	public func writeRows (sheetId: Int, rows: [[String]], starting from: Sheet.Location) -> Promise<Sheet.UpdateResponse> {
+	/// Write many cells at once.
+	public func writeRows (sheetId: Int, rows: [[String]], starting from: Sheet.Location) -> Promise<Spreadsheet.UpdateResponse> {
 		batchUpdate(.updateCells(sheetId: sheetId, rows: rows, start: from))
 	}
-	public func create (title: String, dimensions grid: Sheet.Properties.Grid?) -> Promise<Sheet.UpdateResponse> {
+	/// Adds a sheet.
+	public func create (title: String, dimensions grid: Sheet.Properties.Grid?) -> Promise<Spreadsheet.UpdateResponse> {
 		batchUpdate(.addSheet(title: title, grid: grid))
 			.then (on: queue) { [weak self] in
 				guard let self = self else {
@@ -54,28 +53,35 @@ public class Spreadsheet: SheetInteractable, Decodable {
 				self.sheets.append(.init(properties: addSheet, data: nil))
 			}
 	}
-	public func delete (sheetId: Int) -> Promise<Sheet.UpdateResponse> {
+	/// Deletes a sheet.
+	public func delete (sheetId: Int) -> Promise<Spreadsheet.UpdateResponse> {
 		batchUpdate(.deleteSheet(sheetId: sheetId))
 		.then (on: queue) { [weak self] _ in
 			self?.sheets.removeAll(where: {$0.properties.sheetId == sheetId})
 		}
 	}
-	public func insert (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Promise<Sheet.UpdateResponse> {
-		batchUpdate(.insert(sheetId: sheetId, range: range, dimension: dimension))
-	}
-	public func append (sheetId: Int, size: Int, dimension: Sheet.Dimension) -> Promise<Sheet.UpdateResponse> {
-		batchUpdate(.append(sheetId: sheetId, size: size, dimension: dimension))
-	}
-	func move (sheetId: Int, range: Range<Int>, to dest: Int, dimension: Sheet.Dimension) -> Promise<Sheet.UpdateResponse> {
-		batchUpdate(.move(sheetId: sheetId, range: range, to: dest, dimension: dimension))
-	}
-	public func appendRows (sheetId: Int, rows: [[String]]) -> Promise<Sheet.UpdateResponse> {
-		batchUpdate(.appendCells(sheetId: sheetId, rows: rows))
-	}
-	public func delete (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Promise<Sheet.UpdateResponse> {
+	/// Deletes rows or columns in a sheet.
+	public func delete (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Promise<Spreadsheet.UpdateResponse> {
 		batchUpdate(.delete(sheetId: sheetId, range: range, dimension: dimension))
 	}
-	public func clear (sheetId: Int) -> Promise<Sheet.UpdateResponse> {
+	/// Inserts new rows or columns in a sheet.
+	public func insert (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Promise<Spreadsheet.UpdateResponse> {
+		batchUpdate(.insert(sheetId: sheetId, range: range, dimension: dimension))
+	}
+	/// Appends dimensions to the end of a sheet.
+	public func append (sheetId: Int, size: Int, dimension: Sheet.Dimension) -> Promise<Spreadsheet.UpdateResponse> {
+		batchUpdate(.append(sheetId: sheetId, size: size, dimension: dimension))
+	}
+	/// Moves rows or columns to another location in a sheet.
+	public func move (sheetId: Int, range: Range<Int>, to dest: Int, dimension: Sheet.Dimension) -> Promise<Spreadsheet.UpdateResponse> {
+		batchUpdate(.move(sheetId: sheetId, range: range, to: dest, dimension: dimension))
+	}
+	/// Appends cells after the last row with data in a sheet.
+	public func appendRows (sheetId: Int, rows: [[String]]) -> Promise<Spreadsheet.UpdateResponse> {
+		batchUpdate(.appendCells(sheetId: sheetId, rows: rows))
+	}
+	/// Clears the sheet.
+	public func clear (sheetId: Int) -> Promise<Spreadsheet.UpdateResponse> {
 		batchUpdate(.clear(sheetId: sheetId))
 	}
 	/// Properties of a spreadsheet
@@ -95,7 +101,4 @@ public class Spreadsheet: SheetInteractable, Decodable {
 		case spreadsheetUrl = "spreadsheetUrl"
 		case sheets = "sheets"
 	}
-}
-public enum DeinitError: Error {
-	case deinitialized
 }

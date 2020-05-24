@@ -100,16 +100,16 @@ final class AtomicSheetTests: XCTestCase {
 }
 
 extension AtomicSheetTests: AtomicSheetDelegate {
-	func operationDidFail(_ sheet: String, operation: Sheet.Operation, error: Error) {
+	func operationDidFail(_ sheet: String, operation: Spreadsheet.Operation, error: Error) {
 		
 	}
-	func uploadWillBegin(_ sheet: String, operations: [Sheet.Operation]) {
+	func uploadWillBegin(_ sheet: String, operations: [Spreadsheet.Operation]) {
 		print ("will upload \(operations.count) operations")
 	}
-	func uploadDidSucceed(_ sheet: String, operations: [Sheet.Operation]) {
+	func uploadDidSucceed(_ sheet: String, operations: [Spreadsheet.Operation]) {
 		print ("uploaded successfully \(operations.count) operations")
 	}
-	func uploadDidFail(_ sheet: String, operations: [Sheet.Operation], error: Error) {
+	func uploadDidFail(_ sheet: String, operations: [Spreadsheet.Operation], error: Error) {
 		print ("failed \(operations.count) operations, error: \(error)")
 	}	
 }

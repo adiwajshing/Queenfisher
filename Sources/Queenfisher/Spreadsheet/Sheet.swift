@@ -86,24 +86,4 @@ public struct Sheet: Codable {
 	public struct Data: Codable {
 		let rowData: [RowData]?
 	}
-	
-	public struct WriteResponse: Codable {
-		let updatedRange: String
-		let updatedRows: Int
-		let updatedColumns: Int
-	}
-	public struct ErrorResponse: Codable, Error {
-		struct SubError: Codable {
-			let domain: String
-			let reason: String
-			let message: String
-		}
-		struct Error: Codable {
-			let code: Int
-			let status: String?
-			let errors: [SubError]?
-			let message: String
-		}
-		let error: Error
-	}
 }
