@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  GMail.Fetch.swift
 //  
 //
 //  Created by Adhiraj Singh on 5/22/20.
@@ -10,6 +10,13 @@ import Promises
 
 public extension GMail {
 	
+	/**
+	Periodically fetch new emails
+	- Parameter interval: how often to fetch
+	- Parameter q: search parameters for which emails to fetch
+	- Parameter lastMailFetched: Date after which to get emails
+	- Parameter onUnreadMessages: Callback for when new messages are fetched
+	*/
 	func fetch (over interval: DispatchTimeInterval = .seconds(60),
 				q: String = "is:unread",
 				lastMailFetched: Date? = nil,

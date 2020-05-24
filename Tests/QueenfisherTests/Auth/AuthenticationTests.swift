@@ -84,7 +84,7 @@ final class AuthenticationTests: XCTestCase {
 		
 		print("could not get oauth, loading service account")
 		loadServiceAccount()
-		factory = serviceAcc?.factory(for: scope)
+		factory = serviceAcc?.factory(forScope: scope)
 		AuthenticationTests.globalAuth = factory
 		return factory
 	}

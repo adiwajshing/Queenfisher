@@ -28,14 +28,14 @@ public class GMail {
 		self.auth = auth
 		self.userId = userId
 	}
-	/// Marks the specific message as read
+	/// Marks the specific message as read (required scope: .mailModify or .mailFullAccess)
 	/// - Parameter id: The id of the specified message
 	/// - Returns: The modified message in the `minimal` format
 	public func markRead (id: String) -> Promise<Message> {
 		modify(id: id, removingLabelIds: ["UNREAD"])
 	}
 	/**
-	Modifies the labels on the specified message
+	Modifies the labels on the specified message (required scope: .mailModify or .mailFullAccess)
 	- Parameter id: The id of the specified message
 	- Parameter addingLabelIds: A list of IDs of labels to add to this message
 	- Parameter removingLabelIds: A list of IDs of labels to remove from this message
@@ -52,7 +52,7 @@ public class GMail {
 						   scope: .mailModify + .mailFullAccess)
 	}
 	/**
-	Moves the specified message to the trash
+	Moves the specified message to the trash (required scope: .mailModify or .mailFullAccess)
 	- Parameter id: The id of the specified message
 	- Returns: The trashed message in the `minimal` format
 	*/
@@ -65,7 +65,7 @@ public class GMail {
 					scope: .mailModify + .mailFullAccess)
 	}
 	/**
-	Gets the specified message
+	Gets the specified message (required scope: .mailRead or .mailFullAccess)
 	- Parameter id: The id of the specified message
 	- Parameter format: The format to return the message in
 	- Parameter metadataHeaders: A list of metadata headers to include. When given and format is METADATA, only include headers specified
@@ -79,7 +79,7 @@ public class GMail {
 					scope: .mailRead + .mailFullAccess)
 	}
 	/**
-	Sends the specified message to the recipients
+	Sends the specified message to the recipients (required scope: .mailCompose or .mailFullAccess)
 	- Parameter message: the message to send
 	- Returns: Metadata of the message in the `minimal` format
 	*/
@@ -90,11 +90,11 @@ public class GMail {
 					method: "POST",
 					scope: .mailCompose)
 	}
-	/// Lists all the unread messages in the user's mailbox
+	/// Lists all the unread messages in the user's mailbox (required scope: .mailRead or .mailFullAccess)
 	public func listUnread () -> Promise<Messages> {
 		list(q: "is:unread")
 	}
-	/// Lists all messages in the query
+	/// Lists all messages in the query (required scope: .mailRead or .mailFullAccess)
 	public func listAll (includeSpamTrash: Bool = false, q: String? = nil, pageToken: String? = nil) -> Promise<Messages> {
 		var messages: Messages!
 		return list(includeSpamTrash: includeSpamTrash, q: q, pageToken: pageToken)
@@ -119,7 +119,7 @@ public class GMail {
 		}
 	}
 	/**
-	Lists the messages in the user's mailbox
+	Lists the messages in the user's mailbox (required scope: .mailRead or .mailFullAccess)
 	- Parameter includeSpamTrash: Include messages from `SPAM` and `TRASH` in the results
 	- Parameter q: Only return messages matching the specified query. Supports the same query format as the Gmail search box. For example, "from:someuser@example.com rfc822msgid:<somemsgid@example.com> is:unread"
 	- Parameter maxResults: Maximum number of messages to return
