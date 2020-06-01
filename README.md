@@ -1,6 +1,7 @@
-# Queenfisher - Cross-Platform Google APIs for Swift
+# Queenfisher - Cross-Platform Google APIs for Swift built with NIO
 
 ## What's Done:
+
 - [x] Authenticating using OAuth & using refresh tokens to continually fetch new access tokens
 - [x] Authenticating using a service account
 - [x] **GMail** -- reading, modifying, fetching, sending & replying to emails
@@ -37,7 +38,7 @@
 	- Now you can load the JSON & generate an access token:
 	``` swift
 	import Queenfisher
-	import Promises
+	import NIO
 	
 	let pathToSecret = URL(fileURLWithPath: "Path/to/client_secret.json")
 	let pathToToken = URL(fileURLWithPath: "Path/to/my_token.json") // place to save the generated token
@@ -53,7 +54,7 @@
 		Paste `abcdefg` below
 	*/
 	let code = readLine(strippingNewline: true)!
-	let accessToken = try await(client.fetchToken(fromCode: code)) // will exchange code for access & refresh tokens
+	let accessToken = try client.fetchToken(fromCode: code).wait() // will exchange code for access & refresh tokens
 	print("got access token: \($0)")
 	
 	/* You can now use this access token for sheets or gmail */
@@ -102,13 +103,13 @@
 	
 	let gmail: GMail = .init(using: authFactory)
 	
-	let profile = try await(gmail.profile())
+	let profile = try gmail.profile().wait()
 	print ("Oh hello: \(profile.emailAddress)") // print email address
 	```
 - [Listing emails](https://developers.google.com/gmail/api/v1/reference/users/messages/list)
 	``` swift
 	gmail.list() // lists all messages in inbox, sent & drafts ordered by timestamp
-	.then (on: .global()) { // handle promise on global dispatch queue
+	.map {
 		print ("got \($0.resultSizeEstimate) messages")
 		if let messages = $0.messages {
 			for m in messages { // metadata of messages
@@ -126,8 +127,8 @@
 - [Reading emails](https://developers.google.com/gmail/api/v1/reference/users/messages/get)
 	``` swift
 	gmail.list() // lists all messages in inbox, sent & drafts ordered by timestamp
-	.then (on: .global()) { gmail.get(id: $0.messages![0].id, format: .full) } // get the first email received
-	.then (on: .global()) { 
+	.flatMap { gmail.get(id: $0.messages![0].id, format: .full) } // get the first email received
+	.map { 
 		print ("email from: \($0.from!)") 
 		print ("email subject: \($0.subject!)") 
 		print ("email snippet: \($0.snippet!)") 
@@ -144,23 +145,23 @@
 									attachments: [ try! .attachment(fileAt: attachFile) ])
 	
 	gmail.send (message: mail)
-	.then (on: .global()) { print ("yay sent mail with ID: \($0.id)") }
-	.catch (on: .global()) { print ("error in sending: \($0)") }
+	.whenComplete { print ("yay sent mail with ID: \($0.id)") }
+	.whenFailure { print ("error in sending: \($0)") }
 	```
 	The `text` in emails must be some html text.
 - [Replying to emails](https://developers.google.com/gmail/api/v1/reference/users/messages/send)
 	``` swift
 	let profile = try await(gmail.profile()) // get profile
 	gmail.list()
-	.then (on: .global()) { gmail.get(id: $0.messages![0].id, format: .full) } // get the first email received
-	.then (on: .global()) { message -> Promise<GMail.Message> in
+	.flatMap { gmail.get(id: $0.messages![0].id, format: .full) } // get the first email received
+	.flatMap { message -> EventLoopFuture<GMail.Message> in
 		let isMailFromMe = $0.from!.email == profile.emailAddress // determine if the email was sent by me
 		let reply: GMail.Message = GMail.Message(replyingTo: message, 
 												fromMe: isMailFromMe, 
 												text: "Wow this is a reply")!
 		return gmail.send (message: reply)
 	}
-	.then (on: .global()) { print ("yay sent reply with ID: \($0.id)") }
+	.whenComplete { print ("yay sent reply with ID: \($0.id)") }
 	```
 - Fetching Emails
 	``` swift
@@ -181,17 +182,17 @@
 	* [Marking emails as read](https://developers.google.com/gmail/api/v1/reference/users/messages/modify)
 	``` swift
 		gmail.markRead (id: idOfTheMessage)
-		.then (on: .global()) { print ("yay read mail with ID: \($0.id)") }
+		.whenComplete { print ("yay read mail with ID: \($0.id)") }
 	```
 	* [Trashing emails](https://developers.google.com/gmail/api/v1/reference/users/messages/trash)
 	``` swift
 		gmail.trash (id: idOfTheMessage)
-		.then (on: .global()) { print ("yay trashed mail with ID: \($0.id)") }
+		.whenComplete { print ("yay trashed mail with ID: \($0.id)") }
 	```
 	* [Modifying labels on emails](https://developers.google.com/gmail/api/v1/reference/users/messages/modify)
 	``` swift
 		gmail.modify (id: idOfTheMessage, adddingLabelIds: ["UNREAD"]) // effectively mark an email as unread
-		.then (on: .global()) { print ("yay modified mail with ID: \($0.id)") }
+		.whenComplete { print ("yay modified mail with ID: \($0.id)") }
 	```
 
 ## Sheets API
@@ -199,7 +200,7 @@
 - [Getting](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/get) a Spreadsheet:
 	``` swift
 	import Queenfisher
-	import Promises
+	import NIO
 
 	// create an authentication factory using the access token & secret
 	// make sure your token has access to GMail
@@ -207,7 +208,9 @@
 	let client: GoogleOAuthClient = try .loading(from: pathToSecret)
 	let authFactory = try client.factory(usingAccessToken: .loading(fromJSONAt: pathToToken))
 	
-	let spreadsheet: Spreadsheet = try await(.get("abcdefghi", using: authFactory))
+	let spreadsheetId = "abcdefghi" // insert actual spreadsheet ID
+	
+	let spreadsheet: Spreadsheet = try .get(spreadsheetId, using: authFactory).wait ()
 	print("Got spreadsheet '\(spreadsheet.properties.title)', sheets: \(spreadsheet.sheets.map({$0.properties.title}))") 
 	```
 - [Writing](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#updatecellsrequest) rows to a spreadsheet:
@@ -222,7 +225,7 @@
 	]
 	// write these rows to the start of the spreadsheet
 	spreadsheet.writeRows (sheetId: sheetId, rows: rows, starting: .cell(0,0))
-	.then (on: .global()) { _ in print ("yay done") }
+	.whenComplete { _ in print ("yay done") }
 	```
 - [Appending](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#appendcellsrequest) rows to a spreadsheet:
 	``` swift
@@ -235,53 +238,53 @@
 	]
 	// append these rows after the last row with data in the sheet
 	spreadsheet.appendRows (sheetId: sheetId, rows: rows)
-	.then (on: .global()) { _ in print ("yay done") }
+	.whenComplete { _ in print ("yay done") }
 	```
 - [Reading](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/get) from a spreadsheet:
 	``` swift
 	let sheetId = spreadsheet.sheet (forTitle: "Sheet 1")!.properties.sheetId!
 	
 	spreadsheet.read (sheetId: sheetId)
-	.then (on: .global()) { print ("\($0.values)") }
+	.whenComplete { print ("\($0.values)") }
 	
 	/* or if you want to read a specific range */
-	spreadsheet.read (sheetId: sheetId, range: (.row(1), .row(5))) // read all columns from row 2 to 6
-	.then (on: .global()) { print ("\($0.values)") }
+	spreadsheet.read (sheetId: sheetId, range: (.row(1), .row(5))) // read all columns in row index 1 to 5
+	.whenComplete { print ("\($0.values)") }
 	```
 - [Inserting](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#insertdimensionrequest) empty rows/columns into a sheet:
 	``` swift
 	spreadsheet.insert(sheetId: sheetId, range: 2..<4, dimension: .columns) // insert 2 columns at index 2
-	.then (on: .global()) { _ in print ("yay inserted") }
+	.whenComplete { _ in print ("yay inserted") }
 	```
 - [Appending](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#appenddimensionrequest) empty rows/columns into a sheet:
 	``` swift
 	spreadsheet.append(sheetId: sheetId, size: 3, dimension: .columns) // append 3 columns
-	.then (on: .global()) { _ in print ("yay appended") }
+	.whenComplete { _ in print ("yay appended") }
 	```
 - [Moving](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#movedimensionrequest) rows/columns in a sheet:
 	``` swift
 	spreadsheet.move(sheetId: sheetId, range: 2..<3, to: 2, to: 1, dimension: .rows) // move rows 2-3 to index 1
-	.then (on: .global()) { _ in print ("yay moved") }
+	.whenComplete { _ in print ("yay moved") }
 	```
 - [Deleting](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#deletedimensionrequest) rows/columns in a sheet:
 	``` swift
 	spreadsheet.delete(sheetId: sheetId, range: 2..<3, to: 2, dimension: .rows) // deletes rows at indexes 2-3
-	.then (on: .global()) { _ in print ("yay deleted") }
+	.whenComplete { _ in print ("yay deleted") }
 	```
 - [Adding](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#addsheetrequest) rows/columns in a sheet:
 	``` swift
 	spreadsheet.create(title: "Name of the sheet", dimensions: .init(rowCount: 10, columnCount: 5))
-	.then (on: .global()) { print ("yay created with ID: \($0.replies.first!.addSheet!.properties!.sheetId)") }
+	.whenComplete { print ("yay created with ID: \($0.replies.first!.addSheet!.properties!.sheetId)") }
 	```
 - [Deleting](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#deletesheetrequest) a sheet from a spreadsheet:
 	``` swift
 	spreadsheet.delete(sheetId: sheetId)
-	.then (on: .global()) { _ in print ("yay deleted") }
+	.whenComplete { _ in print ("yay deleted") }
 	```
 - [Clearing](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#updatecellsrequest) a sheet:
 	``` swift
 	spreadsheet.clear(sheetId: sheetId) // will delete all data in the sheet
-	.then (on: .global()) { _ in print ("yay cleared") }
+	.whenComplete { _ in print ("yay cleared") }
 	```
 	
 Haven't documented IndexedSheet & AtomicSheet yet :/

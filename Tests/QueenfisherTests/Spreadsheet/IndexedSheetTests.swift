@@ -1,5 +1,5 @@
 import XCTest
-import Promises
+import NIO
 @testable import Queenfisher
 
 final class IndexedSheetTests: XCTestCase {
@@ -17,6 +17,7 @@ final class IndexedSheetTests: XCTestCase {
 					  using: auth,
 					  header: ActivePhoneCall.header,
 					  indexer: ActivePhoneCall.indexer,
+					  client: getHttpClient(),
 					  delegate: self)
 	}
 	override func tearDown() {
@@ -27,21 +28,20 @@ final class IndexedSheetTests: XCTestCase {
 		db = db.map { _ in ActivePhoneCall.random() }.sorted()
 	}
 	func testLoadSheet () {
-		XCTAssertNoThrow(_ = try await (sheet.get().then(on: queue) { print($0) } ))
+		XCTAssertNoThrow(_ = try sheet.get().map { print($0) }.wait() )
 	}
-	func synchronize () -> Promise<Int> {
-		let dbFunc = {
-			Promise(())
-			.delay(on: self.queue, 3) // delay to simulate delay in loading a DB
-			.then(on: self.queue) { self.db.map { $0.row() } }
+	func synchronize () -> EventLoopFuture<Int> {
+		sheet.synchronize {
+			let ev = self.sheet.client.eventLoopGroup.next()
+			let task = ev.scheduleTask(in: .seconds(3)) { self.db.map { $0.row() } }
+			return task.futureResult
 		}
-		return sheet.synchronize(with: dbFunc)
 	}
 	func testSynchronize () {
 		// check that it synchronizes correctly even when the sheet is empty & when the DB is completely different
 		for _ in 0..<2 {
 			newDB()
-			XCTAssertNoThrow(try await( synchronize() ))
+			XCTAssertNoThrow(try synchronize().wait())
 			assertMatch()
 		}
 	}
@@ -50,25 +50,24 @@ final class IndexedSheetTests: XCTestCase {
 		queue.sync {
 			for _ in 0..<100 {
 				let op = (0..<5).randomElement()!
-				let promise: Promise<Void>
 				switch op {
 				case 0:
 					let index = db.indices.randomElement()!
 					db[index].toNumber = String ((1000000000...9999999999).randomElement()!)
-					promise = sheet.update(values: db[index].toNumber, for: db[index].dbKey(), offset: 2)
+					_ = sheet.update(values: db[index].toNumber, for: db[index].dbKey(), offset: 2)
 					break
 				case 1:
 					let index = db.indices.randomElement()!
 					let row = db[index].row()
-					promise = sheet.delete(row: row)
+					_ = sheet.delete(row: row)
 					db.remove(at: index)
 					break
 				case 2:
-					promise = .init(())
+					
 					break
 				default:
 					let p = ActivePhoneCall.random()
-					promise = sheet.place(row: p.row())
+					_ = sheet.place(row: p.row())
 					if let index = db.firstIndex(where: { $0 > p }) {
 						db.insert(p, at: index)
 					} else {
@@ -76,7 +75,6 @@ final class IndexedSheetTests: XCTestCase {
 					}
 					break
 				}
-				promise.then(on: queue) {  }
 			}
 		}
 	}
@@ -89,7 +87,7 @@ final class IndexedSheetTests: XCTestCase {
 			assertMatch()
 		}
 		// check that the DB is in perfect health, and no discrepancies exist
-		XCTAssertNoThrow( try await(synchronize()) == 0 )
+		XCTAssertNoThrow( try synchronize().wait() == 0 )
 	}
 	
 	func testBinarySearchValidity () {
@@ -119,21 +117,17 @@ final class IndexedSheetTests: XCTestCase {
 	func assertMatch () {
 		var ops = 10
 		while ops > 0 {
-			XCTAssertNoThrow(ops = try await(sheet.operationsLeft()))
+			XCTAssertNoThrow(ops = try sheet.operationsLeft().wait())
 			usleep(100*1000)
 		}
-		
-		XCTAssertNoThrow(
-			try await(
-				sheet.read(sheet: sheetTitle)
-				.then(on: .global()) {
-					let rows = [ ActivePhoneCall.header ] + self.db.map { $0.row() }
-					XCTAssertEqual(rows.count, $0.values?.count)
-					XCTAssertEqual(rows, $0.values)
-					XCTAssertEqual(Set(self.db.map { $0.dbKey() }).count, self.db.count)
-				}
-			)
-		)
+		let future = sheet.read(sheet: sheetTitle)
+		future.whenSuccess {
+			let rows = [ ActivePhoneCall.header ] + self.db.map { $0.row() }
+			XCTAssertEqual(rows.count, $0.values?.count)
+			XCTAssertEqual(rows, $0.values)
+			XCTAssertEqual(Set(self.db.map { $0.dbKey() }).count, self.db.count)
+		}
+		XCTAssertNoThrow( try future.wait() )
 	}
 	
 }

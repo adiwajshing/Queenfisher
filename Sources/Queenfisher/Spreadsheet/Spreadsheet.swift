@@ -1,5 +1,7 @@
-import Promises
 import Foundation
+import NIO
+import AsyncHTTPClient
+
 /// Class to read & write to a google spreadsheet
 public class Spreadsheet: SheetInteractable, Decodable {
 	/// The ID of the spreadsheet. This field is read-only
@@ -12,6 +14,7 @@ public class Spreadsheet: SheetInteractable, Decodable {
 	private(set) public var sheets: [Sheet]
 	/// Method to authenticate for the spreadsheet
 	private(set) public var authenticator: Authenticator?
+	private(set) public var client: HTTPClient!
 	public let queue = DispatchQueue.global()
 	
 	// Custom decoding init to allow `DispatchQueue` & `Authenticator` properties
@@ -27,61 +30,67 @@ public class Spreadsheet: SheetInteractable, Decodable {
 	- Parameter spreadsheetId: The ID of the spreadsheet you want to load
 	- Parameter authenticator: Authentication method to get the spreadsheet & to use on all successive operations on the spreadsheet
 	*/
-	public static func get (_ spreadsheetId: String, using authenticator: Authenticator) -> Promise<Spreadsheet> {
+	public static func get (_ spreadsheetId: String, using authenticator: Authenticator, client: HTTPClient) -> EventLoopFuture<Spreadsheet> {
 		let url = sheetsApiUrl.appendingPathComponent(spreadsheetId)
-		let queue: DispatchQueue = .global()
-		return authenticator.authenticationHeaders(scope: .sheets)
-		.then(on: queue) { try url.httpRequest(headers: $0, method: "GET", errorType: ErrorResponse.self) }
-		.then(on: queue) { $0.authenticator = authenticator }
+		return authenticator.authenticationHeader(scope: .sheets, client: client)
+			.flatMapThrowing { try client.execute(url: url, headers: [$0], method: .GET, errorType: ErrorResponse.self) }
+			.map { (spreadsheet: Spreadsheet) -> Spreadsheet in
+				spreadsheet.authenticator = authenticator
+				spreadsheet.client = client
+				return spreadsheet
+			}
+		
 	}
 	/// Get the sheet for the specified `title`
 	public func sheet (forTitle title: String) -> Sheet? {
 		sheets.first(where: {$0.properties.title == title})
 	}
 	/// Write many cells at once.
-	public func writeRows (sheetId: Int, rows: [[String]], starting from: Sheet.Location) -> Promise<Spreadsheet.UpdateResponse> {
+	public func writeRows (sheetId: Int, rows: [[String]], starting from: Sheet.Location) -> EventLoopFuture<Spreadsheet.UpdateResponse> {
 		batchUpdate(.updateCells(sheetId: sheetId, rows: rows, start: from))
 	}
 	/// Adds a sheet.
-	public func create (title: String, dimensions grid: Sheet.Properties.Grid?) -> Promise<Spreadsheet.UpdateResponse> {
-		batchUpdate(.addSheet(title: title, grid: grid))
-			.then (on: queue) { [weak self] in
-				guard let self = self else {
-					return
-				}
-				let addSheet = $0.replies.first!.addSheet!.properties!
-				self.sheets.append(.init(properties: addSheet, data: nil))
+	public func create (title: String, dimensions grid: Sheet.Properties.Grid?) -> EventLoopFuture<Spreadsheet.UpdateResponse> {
+		let update = batchUpdate(.addSheet(title: title, grid: grid))
+		update.whenSuccess { [weak self] in
+			guard let self = self else {
+				return
 			}
+			let addSheet = $0.replies.first!.addSheet!.properties!
+			self.sheets.append(.init(properties: addSheet, data: nil))
+		}
+		return update
 	}
 	/// Deletes a sheet.
-	public func delete (sheetId: Int) -> Promise<Spreadsheet.UpdateResponse> {
-		batchUpdate(.deleteSheet(sheetId: sheetId))
-		.then (on: queue) { [weak self] _ in
+	public func delete (sheetId: Int) -> EventLoopFuture<Spreadsheet.UpdateResponse> {
+		let update = batchUpdate(.deleteSheet(sheetId: sheetId))
+		update.whenSuccess { [weak self] _ in
 			self?.sheets.removeAll(where: {$0.properties.sheetId == sheetId})
 		}
+		return update
 	}
 	/// Deletes rows or columns in a sheet.
-	public func delete (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Promise<Spreadsheet.UpdateResponse> {
+	public func delete (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> EventLoopFuture<Spreadsheet.UpdateResponse> {
 		batchUpdate(.delete(sheetId: sheetId, range: range, dimension: dimension))
 	}
 	/// Inserts new rows or columns in a sheet.
-	public func insert (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> Promise<Spreadsheet.UpdateResponse> {
+	public func insert (sheetId: Int, range: Range<Int>, dimension: Sheet.Dimension) -> EventLoopFuture<Spreadsheet.UpdateResponse> {
 		batchUpdate(.insert(sheetId: sheetId, range: range, dimension: dimension))
 	}
 	/// Appends dimensions to the end of a sheet.
-	public func append (sheetId: Int, size: Int, dimension: Sheet.Dimension) -> Promise<Spreadsheet.UpdateResponse> {
+	public func append (sheetId: Int, size: Int, dimension: Sheet.Dimension) -> EventLoopFuture<Spreadsheet.UpdateResponse> {
 		batchUpdate(.append(sheetId: sheetId, size: size, dimension: dimension))
 	}
 	/// Moves rows or columns to another location in a sheet.
-	public func move (sheetId: Int, range: Range<Int>, to dest: Int, dimension: Sheet.Dimension) -> Promise<Spreadsheet.UpdateResponse> {
+	public func move (sheetId: Int, range: Range<Int>, to dest: Int, dimension: Sheet.Dimension) -> EventLoopFuture<Spreadsheet.UpdateResponse> {
 		batchUpdate(.move(sheetId: sheetId, range: range, to: dest, dimension: dimension))
 	}
 	/// Appends cells after the last row with data in a sheet.
-	public func appendRows (sheetId: Int, rows: [[String]]) -> Promise<Spreadsheet.UpdateResponse> {
+	public func appendRows (sheetId: Int, rows: [[String]]) -> EventLoopFuture<Spreadsheet.UpdateResponse> {
 		batchUpdate(.appendCells(sheetId: sheetId, rows: rows))
 	}
 	/// Clears the sheet.
-	public func clear (sheetId: Int) -> Promise<Spreadsheet.UpdateResponse> {
+	public func clear (sheetId: Int) -> EventLoopFuture<Spreadsheet.UpdateResponse> {
 		batchUpdate(.clear(sheetId: sheetId))
 	}
 	/// Properties of a spreadsheet

@@ -13,16 +13,16 @@ let package = Package(
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
-		.package(name: "Promises", url: "https://github.com/google/promises.git", from: "1.2.8"),
-		.package(url: "https://github.com/vapor/jwt-kit", from: "4.0.0-rc.1")
-		
+		.package(url: "https://github.com/vapor/jwt-kit", from: "4.0.0-rc.1"),
+		.package(url: "https://github.com/swift-server/async-http-client.git", from: "1.0.0")
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
         // Targets can depend on other targets in this package, and on products in packages which this package depends on.
         .target(
             name: "Queenfisher",
-			dependencies: ["Promises", .product(name: "JWTKit", package: "jwt-kit")]),
+			dependencies: [.product(name: "JWTKit", package: "jwt-kit"),
+						   .product(name: "AsyncHTTPClient", package: "async-http-client")]),
         .testTarget(
             name: "QueenfisherTests",
             dependencies: ["Queenfisher"]),

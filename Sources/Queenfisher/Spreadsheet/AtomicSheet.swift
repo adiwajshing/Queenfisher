@@ -6,7 +6,8 @@
 //
 
 import Foundation
-import Promises
+import NIO
+import AsyncHTTPClient
 
 public class AtomicSheet: SheetInteractable {
 	
@@ -29,57 +30,63 @@ public class AtomicSheet: SheetInteractable {
 	private var operationQueue = [Spreadsheet.Operation]()
 	internal var uploading = false
 	
-	private let onLoad = Promise<Void>.pending()
-	private var pendingOperationChain: Promise<Void>
+	private let onLoad: EventLoopPromise<Void>
+	private var pendingOperationChain: EventLoopFuture<Void>
 	
 	private let start: Sheet.Location = .cell(0, 0)
 	private let serialQueue: DispatchQueue = .init(label: "write_queue", attributes: [])
-	public let queue: DispatchQueue = .global()
 	
-	public init (spreadsheetId: String, sheetTitle: String,
-				 using authenticator: Authenticator, delegate: AtomicSheetDelegate? = nil) {
+	public let client: HTTPClient!
+	
+	public init (spreadsheetId: String,
+				 sheetTitle: String,
+				 using authenticator: Authenticator,
+				 client: HTTPClient,
+				 delegate: AtomicSheetDelegate? = nil) {
 		self.spreadsheetId = spreadsheetId
 		self.authenticator = authenticator
 		self.sheetTitle = sheetTitle
 		self.delegate = delegate
+		self.client = client
 		
+		onLoad = client.eventLoopGroup.next().makePromise()
 		operationQueue = [.load()]
-		pendingOperationChain = onLoad
+		pendingOperationChain = onLoad.futureResult
 		_ = beginUpload()
 	}
-	public func get () -> Promise<[[String]]> {
+	public func get () -> EventLoopFuture<[[String]]> {
 		executeInPendingChain { self.data }
 	}
-	public func operationsLeft () -> Promise<Int> {
+	public func operationsLeft () -> EventLoopFuture<Int> {
 		executeInPendingChain { self.operationQueue.count }
 	}
-	func executeInPendingChain <T> (_ block: @escaping () throws -> T) -> Promise<T> {
-		Promise(on: serialQueue, { (fulfill, reject) in
-			let promise = self.pendingOperationChain
-						.then(on: self.serialQueue) {
+	func executeInPendingChain <T> (_ block: @escaping () throws -> T) -> EventLoopFuture<T> {
+		let promise = client.eventLoopGroup.next().makePromise(of: T.self)
+		serialQueue.async {
+			let op = self.pendingOperationChain
+						.map {
 							do {
-								fulfill(try block())
+								promise.succeed(try block())
 							} catch {
-								reject(error)
+								promise.fail(error)
 							}
 						}
-			
-			self.pendingOperationChain = promise.then(on: self.queue) { _ in }
-		})
+			self.pendingOperationChain = op
+		}
+		return promise.futureResult
 	}
-	func executeInPendingChain <T> (_ block: @escaping () throws -> Promise<T>) -> Promise<T> {
-		Promise(on: serialQueue, { (fulfill, reject) in
-			let promise = self.pendingOperationChain
-						.then(on: self.serialQueue) { try block() }
-						.then(on: self.serialQueue) { fulfill($0) }
-						.catch(on: self.serialQueue, reject)
-			
-			self.pendingOperationChain = promise.then(on: self.queue) { _ in }
-		})
+	func executeInPendingChain <T> (_ block: @escaping () throws -> EventLoopFuture<T>) -> EventLoopFuture<T> {
+		let promise = client.eventLoopGroup.next().makePromise(of: T.self)
+		serialQueue.async {
+			let op = self.pendingOperationChain.flatMapThrowing (block)
+				.map (promise.succeed)
+				.flatMapErrorThrowing(promise.fail)
+			self.pendingOperationChain = op
+		}
+		return promise.futureResult
 	}
 	
-	
-	public func operate (using block: @escaping (AtomicSheet) throws -> Void) -> Promise<Void> {
+	public func operate (using block: @escaping (AtomicSheet) throws -> Void) -> EventLoopFuture<Void> {
 		executeInPendingChain { () -> Void in
 			try block(self)
 			if !self.uploading {
@@ -192,50 +199,53 @@ public class AtomicSheet: SheetInteractable {
 	}
 	
 	func scheduleUpload (in time: DispatchTimeInterval) {
-		queue.asyncAfter(deadline: .now() + time, execute: { _ = self.beginUpload() })
+		serialQueue.asyncAfter(deadline: .now() + time, execute: { _ = self.beginUpload() })
 	}
-	func beginUpload () -> Promise<Void> {
-		Promise(on: serialQueue) { (fulfill, reject) in
+	func beginUpload () -> EventLoopFuture<Void> {
+		let promise = client.eventLoopGroup.next().makePromise(of: Void.self)
+		serialQueue.async {
 			if !self.uploading, self.operationQueue.count > 0 {
 				self.uploading = true
-				try self.upload(till: self.operationQueue.count, ops: self.operationQueue)
-					.then(on: self.serialQueue) { index -> Promise<Void> in
-						self.operationQueue.removeSubrange(0..<index)
-						self.uploading = false
-						return self.beginUpload()
-					}
+				
+				let future = self.upload(till: self.operationQueue.count, ops: self.operationQueue)
+				.flatMap { index -> EventLoopFuture<Void> in
+					self.operationQueue.removeSubrange(0..<index)
+					self.uploading = false
+					return self.beginUpload()
+				}
+				future.whenFailure(promise.fail)
+				future.whenSuccess(promise.succeed)
 			} else {
-				fulfill(())
+				promise.succeed(())
 			}
 		}
+		return promise.futureResult
 	}
-	private func upload (till index: Int, ops: [Spreadsheet.Operation]) throws -> Promise<Int> {
+	private func upload (till index: Int, ops: [Spreadsheet.Operation]) -> EventLoopFuture<Int> {
 		let workTill: Int
-		let promise: Promise<Void>
+		let future: EventLoopFuture<Void>
 		
 		if ops.first!.load == true {
 			workTill = 1
-			promise = load()
+			future = load()
 		} else {
 			workTill = index
-			promise = batchUpdate(operations: .init(requests: ops)).then(on: queue) { _ in }
+			future = batchUpdate(operations: .init(requests: ops)).map { _ in }
 		}
 		
 		let workedOps = Array(ops[0..<workTill])
 		delegate?.uploadWillBegin(sheetTitle, operations: workedOps)
-		return promise
-			.then(on: serialQueue) { _ -> Int in
-				self.delegate?.uploadDidSucceed(self.sheetTitle, operations: workedOps)
-				return workTill
-			}
-			.catch(on: serialQueue) {
-				//print ("error: \($0)")
-				self.delegate?.uploadDidFail(self.sheetTitle, operations: workedOps, error: $0)
-				self.uploading = false
-				self.scheduleUpload(in: self.reuploadInterval)
-			}
+		
+		future.whenSuccess { self.delegate?.uploadDidSucceed(self.sheetTitle, operations: workedOps) }
+		future.whenFailure {
+			//print ("error: \($0)")
+			self.delegate?.uploadDidFail(self.sheetTitle, operations: workedOps, error: $0)
+			self.uploading = false
+			self.scheduleUpload(in: self.reuploadInterval)
+		}
+		return future.map { workTill }
 	}
-	private func load () -> Promise<Void> {
+	private func load () -> EventLoopFuture<Void> {
 		var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)!
 		comps.queryItems = [
 			URLQueryItem(name: "fields", value: "sheets.properties,sheets.data.rowData.values.userEnteredValue"),
@@ -243,28 +253,27 @@ public class AtomicSheet: SheetInteractable {
 		]
 		let url = comps.url!
 		return authenticating()
-			.then(on: queue) { try url.httpRequest(headers: $0, decoder: JSONDecoder(), errorType: ErrorResponse.self) }
-			.recover(on: queue) { err throws -> SheetsObject in
+			.flatMapThrowing { try self.client.execute(url: url, headers: $0, errorType: ErrorResponse.self) }
+			.flatMapErrorThrowing { err -> SheetsObject in
 				if let error = err as? ErrorResponse, error.error.code == 400 {
 					return SheetsObject(sheets: [])
 				}
 				throw err
 			}
-			.then(on: queue) { sheets -> Promise<Sheet> in
+			.flatMapThrowing { sheets -> EventLoopFuture<Sheet> in
 				if let sheet = sheets.sheets.first {
-					return .init(sheet)
+					return self.client!.eventLoopGroup.next().makeSucceededFuture(sheet)
 				} else {
 					return self.batchUpdate(.addSheet(title: self.sheetTitle, grid: nil))
-						.then(on: self.queue) { Sheet(properties: $0.replies.first!.addSheet!.properties!, data: nil) }
+						.map { Sheet(properties: $0.replies.first!.addSheet!.properties!, data: nil) }
 				}
 			}
-			.then(on: queue) {
+			.map {
 				self.sheetId = $0.properties.sheetId
 				self.data = $0.data?[0].rowData?.map { $0.values.map { $0.toString() } } ?? []
 				self.end = .cell($0.properties.gridProperties!.columnCount, $0.properties.gridProperties!.rowCount)
 				self.isSheetLoaded = true
-				self.onLoad.fulfill(())
-				return .init(())
+				self.onLoad.succeed(())
 			}
 	}
 

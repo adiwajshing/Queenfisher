@@ -6,7 +6,8 @@
 //
 
 import Foundation
-import Promises
+import NIO
+import AsyncHTTPClient
 
 let oAuthApiUrl = URL(string: "https://oauth2.googleapis.com/token")!
 
@@ -33,39 +34,49 @@ public struct GoogleOAuthClient: Codable, AccessTokenFactory {
 		comps.queryItems = query
 		return comps.url!
 	}
-	
-	public func fetchToken (fromCode code: String) throws -> Promise<AccessToken> {
+	public func fetchToken (fromCode code: String, client: HTTPClient) -> EventLoopFuture<AccessToken> {
 		let req: OAuthRequest = .init(code: code,
 									  refreshToken: nil,
 									  clientId: clientId,
 									  clientSecret: clientSecret,
 									  redirectUri: redirectUris.first!,
 									  grantType: .authorizationCode)
-		return try oAuthApiUrl.httpRequest(headers: [:], body: req, errorType: GoogleAuthenticationError.self)
-			.then(on: .global()) { (k: AccessToken) -> AccessToken in
-				k.with(expiry: Date().addingTimeInterval(k.expiresIn.timeIntervalSince1970))
-			}
+		return client.eventLoopGroup.next()
+			.submit { try client.execute(url: oAuthApiUrl,
+										 headers: [],
+										 body: req,
+										 method: .POST,
+										 errorType: GoogleAuthenticationError.self) }
+			.flatMap { $0 }
+			.map { (k:AccessToken) in k.with(expiry: Date().addingTimeInterval(k.expiresIn.timeIntervalSince1970)) }
 	}
-	public func fetchToken(for scope: GoogleScope) throws -> Promise<AccessToken> {
-		guard let factoryKeyToken = self.factoryToken?.refreshToken else {
-			throw GoogleAuthenticationError.init(error: "refresh token absent")
+	public func fetchToken(for scope: GoogleScope, client: HTTPClient) -> EventLoopFuture<AccessToken> {
+		client.eventLoopGroup.next()
+		.submit { () in
+			guard let factoryKeyToken = self.factoryToken?.refreshToken else {
+				throw GoogleAuthenticationError.init(error: "refresh token absent")
+			}
+			let req: OAuthRequest = .init(code: nil,
+										  refreshToken: factoryKeyToken,
+										  clientId: self.clientId,
+										  clientSecret: self.clientSecret,
+										  redirectUri: self.redirectUris.first!,
+										  grantType: .refreshToken)
+			return try client.execute(url: oAuthApiUrl,
+									  headers: [],
+									  body: req,
+									  method: .POST,
+									  errorType: GoogleAuthenticationError.self)
 		}
-		
-		let req: OAuthRequest = .init(code: nil,
-									  refreshToken: factoryKeyToken,
-									  clientId: clientId,
-									  clientSecret: clientSecret,
-									  redirectUri: redirectUris.first!,
-									  grantType: .refreshToken)
-		return try oAuthApiUrl.httpRequest(headers: [:], body: req, errorType: GoogleAuthenticationError.self)
+		.flatMap { $0 }
 	}
 	public func factory(usingAccessToken token: AccessToken) throws -> AuthenticationFactory {
 		guard let _ = token.refreshToken else {
 			throw GoogleAuthenticationError(error: "refresh token absent")
 		}
-		var client = self
-		client.factoryToken = token
-		return .init(scope: token.scope, using: client)
+		var oauth = self
+		oauth.factoryToken = token
+		return .init(scope: token.scope, using: oauth)
 	}
 	
 	struct OAuthRequest: Codable {

@@ -1,5 +1,4 @@
 import XCTest
-import Promises
 @testable import Queenfisher
 
 final class AtomicSheetTests: XCTestCase {
@@ -15,7 +14,11 @@ final class AtomicSheetTests: XCTestCase {
 			XCTFail("Auth nil")
 			return
 		}
-		sheet = .init(spreadsheetId: testSpreadsheetId, sheetTitle: testSheet, using: auth, delegate: self)
+		sheet = .init(spreadsheetId: testSpreadsheetId,
+					  sheetTitle: testSheet,
+					  using: auth,
+					  client: getHttpClient(),
+					  delegate: self)
 	}
 	override func tearDown() {
 		sheet = nil
@@ -77,25 +80,21 @@ final class AtomicSheetTests: XCTestCase {
 			try $0.move(dimension: .rows, range: start..<end, to: 1)
 			try $0.move(dimension: .rows, range: start..<end, to: end+5)
 		}
-		.catch { print("error: \($0)") }
 		
-		waitAndMatch(rows: try! await(sheet.get()))
+		waitAndMatch(rows: try! sheet.get().wait())
 	}
 	func waitAndMatch (rows: [[String]]) {
-		while try! await(sheet.operationsLeft()) > 0 {
+		while try! sheet.operationsLeft().wait() > 0 {
 			usleep(100*1000)
 		}
-		XCTAssertNoThrow(
-			try await(
-				sheet.read(sheet: testSheet)
-				.then(on: queue) {
-					XCTAssertEqual(rows.count, $0.values!.count)
-					for i in rows.indices {
-						XCTAssertEqual(rows[i], $0.values?[i])
-					}
-				}
-			)
-		)
+		let future = sheet.read(sheet: testSheet)
+		future.whenSuccess {
+			XCTAssertEqual(rows.count, $0.values!.count)
+			for i in rows.indices {
+				XCTAssertEqual(rows[i], $0.values?[i])
+			}
+		}
+		XCTAssertNoThrow( try future.wait() )
 	}
 }
 

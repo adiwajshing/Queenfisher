@@ -6,18 +6,19 @@
 //
 
 import Foundation
-import Promises
+import NIO
+import AsyncHTTPClient
 
 public protocol AccessTokenFactory {
 	/// Fetches a fresh access token from Google
-	func fetchToken (for scope: GoogleScope) throws -> Promise<AccessToken>
+	func fetchToken (for scope: GoogleScope, client: HTTPClient) -> EventLoopFuture<AccessToken>
 }
 
 public class AuthenticationFactory: Authenticator {
 	public let scope: GoogleScope
 	public let tokenFactory: AccessTokenFactory
 	
-	var promise: Promise<AccessToken>?
+	var token: EventLoopFuture<AccessToken>?
 	let queue: DispatchQueue = .init(label: "serial-auth-factory", attributes: [])
 	
 	public init (scope: GoogleScope, using factory: AccessTokenFactory) {
@@ -25,34 +26,36 @@ public class AuthenticationFactory: Authenticator {
 		self.tokenFactory = factory
 	}
 	
-	func fetchToken () throws -> Promise<AccessToken> {
+	func fetchToken (client: HTTPClient) -> EventLoopFuture<AccessToken> {
 		print("Renewing API key for \(self.scope)...")
-		return try tokenFactory.fetchToken(for: self.scope)
-			.then(on: queue) { $0.with(expiry: Date().addingTimeInterval($0.expiresIn.timeIntervalSince1970)) }
-			.catch(on: queue) { [weak self] _ in self?.promise = nil }
+		return tokenFactory.fetchToken(for: self.scope, client: client)
+			.map { $0.with(expiry: Date().addingTimeInterval($0.expiresIn.timeIntervalSince1970)) }
+			.flatMapErrorThrowing({ [weak self] (error) -> AccessToken in
+				self?.token = nil
+				throw error
+			})
 	}
-	
-	public func authenticate (scope: GoogleScope) -> Promise<AccessToken> {
-		if !self.scope.containsAny(scope) {
-			return .init( GoogleAuthenticationError(error: "Cannot authenticate for given scope") )
-		}
-		
-		return Promise(())
-		.then(on: queue) { [weak self] _ -> Promise<AccessToken> in
+	public func authenticate(scope: GoogleScope, client: HTTPClient) -> EventLoopFuture<AccessToken> {
+		let ev = client.eventLoopGroup.next()
+		return ev.submit { [weak self] () throws -> EventLoopFuture<AccessToken> in
 			guard let self = self else {
-				throw DeinitError.deinitialized
+				throw NSError ()
 			}
-			if self.promise == nil {
-				self.promise = try self.fetchToken()
+			if !self.scope.containsAny(scope) {
+				throw GoogleAuthenticationError(error: "Cannot authenticate for given scope")
 			}
-			return self.promise!
+			if self.token == nil {
+				self.token = self.fetchToken(client: client)
+			}
+			return self.token!
 		}
-		.then(on: queue) { [weak self] key -> Promise<AccessToken> in
+		.flatMap { $0 }
+		.flatMap { [weak self] key -> EventLoopFuture<AccessToken> in
 			if let self = self, key.isExpired {
-				self.promise = try self.fetchToken()
-				return self.promise!
+				self.token = self.fetchToken(client: client)
+				return self.token!
 			} else {
-				return .init(key)
+				return ev.makeSucceededFuture(key)
 			}
 		}
 	}

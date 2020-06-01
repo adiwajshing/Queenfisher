@@ -6,7 +6,8 @@
 //
 
 import Foundation
-import Promises
+import NIO
+import AsyncHTTPClient
 
 public struct AccessToken: Codable, Authenticator {
 	public var accessToken: String
@@ -22,13 +23,15 @@ public struct AccessToken: Codable, Authenticator {
 	/// Check if the API Key has expired
 	public var isExpired: Bool { Date ().timeIntervalSince(expiresIn) > 0 }
 	
-	public func authenticate(scope: GoogleScope) -> Promise<AccessToken> {
-		if isExpired {
-			return .init( GoogleAuthenticationError(error: "token expired") )
-		} else if !self.scope.containsAny(scope) {
-			return .init( GoogleAuthenticationError(error: "invalid scope") )
-		} else {
-			return .init(self)
+	public func authenticate(scope: GoogleScope, client: HTTPClient) -> EventLoopFuture<AccessToken> {
+		client.eventLoopGroup.next().submit {
+			if self.isExpired {
+				throw GoogleAuthenticationError(error: "token expired")
+			} else if !self.scope.containsAny(scope) {
+				throw GoogleAuthenticationError(error: "invalid scope")
+			} else {
+				return self
+			}
 		}
 	}
 	func with (expiry date: Date) -> AccessToken {

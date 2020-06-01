@@ -1,5 +1,5 @@
 import XCTest
-import Promises
+import AsyncHTTPClient
 @testable import Queenfisher
 
 final class SpreadsheetTests: XCTestCase {
@@ -15,7 +15,7 @@ final class SpreadsheetTests: XCTestCase {
 	
 	override func setUp() {
 		let auth = AuthenticationTests().getFactory(for: .sheets)!
-		XCTAssertNoThrow(sheet = try await (Spreadsheet.get(testSpreadsheetId, using: auth)))
+		XCTAssertNoThrow(sheet = try Spreadsheet.get(testSpreadsheetId, using: auth, client: getHttpClient()).wait())
 		createSheetIfRequired()
 	}
 	override func tearDown() {
@@ -30,7 +30,7 @@ final class SpreadsheetTests: XCTestCase {
 		if sheet!.sheet(forTitle: testSheetTitle) != nil {
 			return
 		}
-		XCTAssertNoThrow(try await(sheet!.create(title: testSheetTitle, dimensions: .init(rowCount: 10, columnCount: 5))))
+		XCTAssertNoThrow(try sheet!.create(title: testSheetTitle, dimensions: .init(rowCount: 10, columnCount: 5)).wait())
 		XCTAssertNotNil(sheet!.sheet(forTitle: testSheetTitle))
 		if let newSheet = sheet!.sheet(forTitle: testSheetTitle)?.properties {
 			print ("Created sheet: \(newSheet.title), id: \(newSheet.sheetId!)")
@@ -47,39 +47,37 @@ final class SpreadsheetTests: XCTestCase {
 			XCTFail("Test sheet not present")
 			return
 		}
-		XCTAssertNoThrow(_ = try await(sheet!.delete(sheetId: sheetId)))
+		XCTAssertNoThrow(_ = try sheet!.delete(sheetId: sheetId).wait())
 		XCTAssertNil(sheet!.sheet(forTitle: testSheetTitle))
 	}
 	func testClearSheet () {
 		let sheetId = sheet!.sheet(forTitle: testSheetTitle)!.properties.sheetId!
 		let task = sheet!.clear(sheetId: sheetId)
-			.then(on: queue) { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (.column(0), .column(4))) }
-			.then (on: queue) { XCTAssertNil ($0.values) }
-		XCTAssertNoThrow(_ = try await(task))
+				.flatMapThrowing { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (.column(0), .column(4))) }
+				.map { XCTAssertNil ($0.values) }
+		XCTAssertNoThrow(try task.wait())
 	}
 	func testReadSheet () {
-		XCTAssertNoThrow(_ = try await(sheet!.read(sheet: testSheetTitle)))
+		XCTAssertNoThrow(try sheet!.read(sheet: testSheetTitle).wait())
 	}
 	func testAppend () {
 		let sheetId = sheet!.sheet(forTitle: testSheetTitle)!.properties.sheetId!
 		var oldEnd: Sheet.Location? = nil
 		let task = sheet!.read(sheet: self.testSheetTitle)
-			.then(on: queue) { oldEnd = $0.end }
-			.then(on: queue) { _ in self.sheet!.append(sheetId: sheetId, size: 5, dimension: .columns) }
-			.then(on: queue) { _ in self.sheet!.read(sheet: self.testSheetTitle) }
-			.then(on: queue) { XCTAssertEqual((oldEnd! + (5, 0)).description, $0.end.description) }
-		
-		XCTAssertNoThrow(try await(task))
+					.map { oldEnd = $0.end  }
+					.flatMapThrowing { self.sheet!.append(sheetId: sheetId, size: 5, dimension: .columns) }
+					.flatMapThrowing { _ in self.sheet!.read(sheet: self.testSheetTitle) }
+					.map { XCTAssertEqual((oldEnd! + (5, 0)).description, $0.end.description) }
+		XCTAssertNoThrow(try task.wait())
 	}
 	func testAppendRows () {
 		let sheetId = sheet!.sheet(forTitle: testSheetTitle)!.properties.sheetId!
 		let rows = [["hello", "how", "we", "doing"],
 					["good", "i", "guess"]]
-		//var oldEnd: Sheet.Location? = nil
 		let task = sheet!.appendRows(sheetId: sheetId, rows: rows)
-			.then(on: queue) { _ in self.sheet!.read(sheet: self.testSheetTitle) }
-			.then(on: queue) { XCTAssertEqual(rows, $0.values!.suffix(rows.count)) }
-		XCTAssertNoThrow(try await(task))
+			.flatMapThrowing { _ in self.sheet!.read(sheet: self.testSheetTitle) }
+			.map { XCTAssertEqual(rows, $0.values!.suffix(rows.count)) }
+		XCTAssertNoThrow(try task.wait())
 	}
 	func testWrite () {
 		let start: Sheet.Location = .cell(0, 0)
@@ -88,9 +86,9 @@ final class SpreadsheetTests: XCTestCase {
 								data: self.data2write,
 								starting: start,
 								dimension: .rows)
-			.then(on: queue) { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (start, end)) }
-			.then (on: queue) { XCTAssertEqual(self.data2write, $0.values) }
-		XCTAssertNoThrow(try await(task))
+					.flatMapThrowing { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (start, end)) }
+					.map { XCTAssertEqual(self.data2write, $0.values) }
+		XCTAssertNoThrow(try task.wait())
 	}
 	func testWriteRows () {
 		let sheetId = sheet.sheet(forTitle: testSheetTitle)!.properties.sheetId!
@@ -99,12 +97,13 @@ final class SpreadsheetTests: XCTestCase {
 		let task = sheet!.writeRows(sheetId: sheetId,
 									rows: self.data2write,
 									starting: start)
-			.then(on: queue) { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (start, end)) }
-			.then (on: queue) { XCTAssertEqual(self.data2write, $0.values) }
-		XCTAssertNoThrow(try await(task))
+			.flatMapThrowing { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (start, end)) }
+			.map { XCTAssertEqual(self.data2write, $0.values) }
+		XCTAssertNoThrow(try task.wait())
 	}
 	func testMove () {
 		testWriteRows()
+		
 		let sheetId = sheet!.sheet(forTitle: testSheetTitle)!.properties.sheetId!
 		let pIndex = 3
 		let rRange = 1..<2
@@ -121,9 +120,9 @@ final class SpreadsheetTests: XCTestCase {
 		let start: Sheet.Location = .cell(0, 0)
 		let end: Sheet.Location = .cell(data2write[0].count-1, data2write.count-1)
 		let task = sheet!.move(sheetId: sheetId, range: rRange, to: pIndex, dimension: .rows)
-			.then(on: queue) { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (start, end)) }
-			.then (on: queue) { XCTAssertEqual(expected, $0.values) }
-		XCTAssertNoThrow(try await(task))
+			.flatMapThrowing { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (start, end)) }
+			.map { XCTAssertEqual(expected, $0.values) }
+		XCTAssertNoThrow(try task.wait())
 	}
 	func testDelete () throws {
 		testClearSheet()
@@ -142,14 +141,14 @@ final class SpreadsheetTests: XCTestCase {
 		}
 		
 		let task = sheet!.delete(sheetId: sheetId, range: rowRemoveRange, dimension: .rows)
-			.then(on: queue) { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (.column(0), .column(3))) }
-			.then (on: queue) { XCTAssertEqual(modifiedData1, $0.values) }
-			.then(on: queue) { self.sheet!.delete(sheetId: sheetId,
+			.flatMapThrowing { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (.column(0), .column(3))) }
+			.map { XCTAssertEqual(modifiedData1, $0.values) }
+			.flatMapThrowing { self.sheet!.delete(sheetId: sheetId,
 												  range: colRemoveRange,
 												  dimension: .columns) }
-			.then(on: queue) { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (.column(0), .column(3))) }
-			.then (on: queue) { XCTAssertEqual(modifiedData2, $0.values) }
-		XCTAssertNoThrow(try await(task))
+			.flatMapThrowing { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (.column(0), .column(3))) }
+			.map { XCTAssertEqual(modifiedData2, $0.values) }
+		XCTAssertNoThrow(try task.wait())
 	}
 	func testInsert () throws {
 		testClearSheet()
@@ -164,9 +163,9 @@ final class SpreadsheetTests: XCTestCase {
 		}
 		
 		let task = sheet!.insert(sheetId: sheetId, range: rowAddRange, dimension: .rows)
-			.then(on: queue) { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (.column(0), .column(4))) }
-			.then (on: queue) { XCTAssertEqual(modifiedData1, $0.values) }
-		XCTAssertNoThrow(try await(task))
+			.flatMapThrowing { _ in self.sheet!.read(sheet: self.testSheetTitle, range: (.column(0), .column(4))) }
+			.map { XCTAssertEqual(modifiedData1, $0.values) }
+		XCTAssertNoThrow(try task.wait())
 	}
 
     static var allTests = [

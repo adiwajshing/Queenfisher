@@ -6,7 +6,8 @@
 //
 
 import Foundation
-import Promises
+import NIO
+import AsyncHTTPClient
 
 /// Methods to upload & maintain a keyed database in a Google Sheet in O(log N) time
 public class IndexedSheet <K: Comparable & Hashable>: AtomicSheet {
@@ -17,13 +18,18 @@ public class IndexedSheet <K: Comparable & Hashable>: AtomicSheet {
 	
 	public init (spreadsheetId: String, sheetTitle: String,
 				 using authenticator: Authenticator, header: [String],
-				 indexer: @escaping (([String]) -> K), delegate: AtomicSheetDelegate? = nil) {
+				 indexer: @escaping (([String]) -> K), client: HTTPClient,
+				 delegate: AtomicSheetDelegate? = nil) {
 		self.indexer = indexer
 		self.header = header
-		super.init(spreadsheetId: spreadsheetId, sheetTitle: sheetTitle, using: authenticator, delegate: delegate)
+		super.init(spreadsheetId: spreadsheetId,
+				   sheetTitle: sheetTitle,
+				   using: authenticator,
+				   client: client,
+				   delegate: delegate)
 	}
 	
-	public func update (values: String..., for key: K, offset: Int, binarySearch: Bool=true) -> Promise<Void> {
+	public func update (values: String..., for key: K, offset: Int, binarySearch: Bool=true) -> EventLoopFuture<Void> {
 		operate {
 			let actual = $0.data.suffix(from: 1)
 			let index = self.position(for: key, in: actual, binarySearch: binarySearch)
@@ -35,7 +41,7 @@ public class IndexedSheet <K: Comparable & Hashable>: AtomicSheet {
 		}
 	}
 	
-	public func place (row: [String], binarySearch: Bool=true) -> Promise<Void> {
+	public func place (row: [String], binarySearch: Bool=true) -> EventLoopFuture<Void> {
 		operate { try self.placeUnsafe(s: $0, row: row, binarySearch: binarySearch) }
 	}
 	func placeUnsafe (s: AtomicSheet, row: [String], binarySearch: Bool) throws {
@@ -56,10 +62,10 @@ public class IndexedSheet <K: Comparable & Hashable>: AtomicSheet {
 			}
 		}
 	}
-	public func delete (row: [String], binarySearch: Bool=true) -> Promise<Void> {
+	public func delete (row: [String], binarySearch: Bool=true) -> EventLoopFuture<Void> {
 		delete(rowWithKey: indexer(row), binarySearch: binarySearch)
 	}
-	public func delete (rowWithKey key: K, binarySearch: Bool=true) -> Promise<Void> {
+	public func delete (rowWithKey key: K, binarySearch: Bool=true) -> EventLoopFuture<Void> {
 		operate { _ in try self.deleteUnsafe(rowWithKey: key, binarySearch: binarySearch) }
 	}
 	func deleteUnsafe (rowWithKey key: K, binarySearch: Bool) throws {
@@ -95,10 +101,10 @@ public class IndexedSheet <K: Comparable & Hashable>: AtomicSheet {
 
 public extension IndexedSheet {
 	
-	func synchronize (with rowFunction: @escaping () -> Promise<[[String]]>) -> Promise<Int> {
+	func synchronize (with rowFunction: @escaping () -> EventLoopFuture<[[String]]>) -> EventLoopFuture<Int> {
 		executeInPendingChain {
 			rowFunction ()
-			.then(on: self.queue) { rows -> Int in
+			.flatMapThrowing { rows -> Int in
 				// verify list is in sorted order
 				if rows.count > 1 {
 					for i in 1..<rows.count {

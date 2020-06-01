@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AsyncHTTPClient
 
 /// url for attachments
 let testAttachmentsUrl = URL(fileURLWithPath: "/Users/adhirajsingh/Desktop/PROJECTS/XCode/Queenfisher/Tests/QueenfisherTests/TestAttachments")
@@ -20,3 +21,12 @@ let testClientFileUrl = testUrl.appendingPathComponent("client_secret.json")
 let testApiKeyUrl = testUrl.appendingPathComponent("apikey.json")
 /// test spreadsheet ID for spreadsheet tests
 let testSpreadsheetId = "1bnv_3HHTXO9kDe4V11OwvbgZw8Ie5Rb0_kjJz8Xs8l8"
+
+private var client: HTTPClient?
+
+func getHttpClient () -> HTTPClient {
+	if client == nil {
+		client = HTTPClient(eventLoopGroupProvider: .createNew)
+	}
+	return client!
+}

@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import Promises
+import NIO
 
 public extension GMail {
 	
@@ -53,14 +53,18 @@ public extension GMail {
 		}
 		
 		listAll(q: query)
-		.then(on: queue) { m -> [GMail.Messages.MessageMeta] in
+		.map { m -> [GMail.Messages.MessageMeta] in
 			self.lastFetchDate = Date()
 			return m.messages ?? []
 		}
-		.then(on: queue) { all(on: self.queue, $0.map { self.get(id: $0.id, format: .full) }) }
-		.then(on: queue) { onUnreadMessages(.success($0)) }
-		.catch(on: queue) { onUnreadMessages(.failure($0)) }
-		.always (on: serialQueue) { self.isFetching = false }
+		.flatMapThrowing {
+			EventLoopFuture.whenAllSucceed($0.map { self.get(id: $0.id, format: .full) },
+										   on: self.client.eventLoopGroup.next())
+		}
+		.whenComplete {
+			onUnreadMessages ($0)
+			self.isFetching = false
+		}
 	}
 	
 	

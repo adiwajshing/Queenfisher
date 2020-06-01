@@ -6,7 +6,9 @@
 //
 
 import Foundation
-import Promises
+import NIO
+import NIOHTTP1
+import AsyncHTTPClient
 
 let gmailApiUrl = URL(string: "https://www.googleapis.com/gmail/v1/")!
 
@@ -21,17 +23,18 @@ public class GMail {
 	let serialQueue: DispatchQueue = .init(label: "serial-gmail", attributes: [])
 	internal(set) public var lastFetchDate = Date(timeIntervalSince1970: 0)
 	
-	let queue: DispatchQueue = .global()
+	let client: HTTPClient
 	lazy var url: URL = { gmailApiUrl.appendingPathComponent("users").appendingPathComponent(userId) }()
 	
-	public init (auth: Authenticator, email userId: String = "me") {
+	public init (auth: Authenticator, email userId: String = "me", client: HTTPClient) {
 		self.auth = auth
 		self.userId = userId
+		self.client = client
 	}
 	/// Marks the specific message as read (required scope: .mailModify or .mailFullAccess)
 	/// - Parameter id: The id of the specified message
 	/// - Returns: The modified message in the `minimal` format
-	public func markRead (id: String) -> Promise<Message> {
+	public func markRead (id: String) -> EventLoopFuture<Message> {
 		modify(id: id, removingLabelIds: ["UNREAD"])
 	}
 	/**
@@ -41,14 +44,14 @@ public class GMail {
 	- Parameter removingLabelIds: A list of IDs of labels to remove from this message
 	- Returns: The modified message in the `minimal` format
 	*/
-	public func modify (id: String, addingLabelIds adds: [String] = [], removingLabelIds removes: [String] = []) -> Promise<Message> {
+	public func modify (id: String, addingLabelIds adds: [String] = [], removingLabelIds removes: [String] = []) -> EventLoopFuture<Message> {
 		let url = self.url
 					.appendingPathComponent("messages")
 					.appendingPathComponent(id)
 					.appendingPathComponent("modify")
 		return authRequest(on: url,
 						   body: ModificationRequest(addLabelIds: adds, removeLabelIds: removes),
-						   method: "POST",
+						   method: .POST,
 						   scope: .mailModify + .mailFullAccess)
 	}
 	/**
@@ -56,12 +59,12 @@ public class GMail {
 	- Parameter id: The id of the specified message
 	- Returns: The trashed message in the `minimal` format
 	*/
-	public func trash (id: String) -> Promise<Message> {
+	public func trash (id: String) -> EventLoopFuture<Message> {
 		authRequest(on: url
 						.appendingPathComponent("messages")
 						.appendingPathComponent(id)
 						.appendingPathComponent("trash"),
-					method: "POST",
+					method: .POST,
 					scope: .mailModify + .mailFullAccess)
 	}
 	/**
@@ -71,11 +74,11 @@ public class GMail {
 	- Parameter metadataHeaders: A list of metadata headers to include. When given and format is METADATA, only include headers specified
 	- Returns: The message in the specified format
 	*/
-	public func get (id: String, format: MessageFormat = .full, metadataHeaders: [String] = []) -> Promise<Message> {
+	public func get (id: String, format: MessageFormat = .full, metadataHeaders: [String] = []) -> EventLoopFuture<Message> {
 		authRequest(on: url.appendingPathComponent("messages").appendingPathComponent(id),
 					body: MessageQuery(format: format,
 									   metadataHeaders: metadataHeaders.count > 0 ? metadataHeaders.joined(separator: ",") : nil),
-					method: "GET",
+					method: .GET,
 					scope: .mailRead + .mailFullAccess)
 	}
 	/**
@@ -83,34 +86,35 @@ public class GMail {
 	- Parameter message: the message to send
 	- Returns: Metadata of the message in the `minimal` format
 	*/
-	public func send (message: Message) -> Promise<Message> {
+	public func send (message: Message) -> EventLoopFuture<Message> {
 		authRequest(on: url.appendingPathComponent("messages").appendingPathComponent("send"),
 					body: EncodedMail(raw: message.raw!,
 									  threadId: message.threadId.isEmpty ? "" : message.threadId),
-					method: "POST",
+					method: .POST,
 					scope: .mailCompose)
 	}
 	/// Lists all the unread messages in the user's mailbox (required scope: .mailRead or .mailFullAccess)
-	public func listUnread () -> Promise<Messages> {
+	public func listUnread () -> EventLoopFuture<Messages> {
 		list(q: "is:unread")
 	}
 	/// Lists all messages in the query (required scope: .mailRead or .mailFullAccess)
-	public func listAll (includeSpamTrash: Bool = false, q: String? = nil, pageToken: String? = nil) -> Promise<Messages> {
+	public func listAll (includeSpamTrash: Bool = false, q: String? = nil, pageToken: String? = nil) -> EventLoopFuture<Messages> {
 		var messages: Messages!
 		return list(includeSpamTrash: includeSpamTrash, q: q, pageToken: pageToken)
-		.then (on: queue) { m -> Promise<Messages> in
+		.flatMap { m -> EventLoopFuture<Messages> in
 			messages = m
 			if let nextToken = m.nextPageToken {
 				return self.listAll(includeSpamTrash: includeSpamTrash,
 									q: q,
 									pageToken: nextToken)
 			} else {
-				return .init(Messages(messages: nil,
-									  nextPageToken: nil,
-									  resultSizeEstimate: 0))
+				return self.client.eventLoopGroup.next()
+					.makeSucceededFuture(Messages(messages: nil,
+												  nextPageToken: nil,
+												  resultSizeEstimate: 0))
 			}
 		}
-		.then(on: queue) { m -> Messages in
+		.map { m -> Messages in
 			if var ms = m.messages {
 				ms += m.messages ?? []
 				return Messages(messages: ms, nextPageToken: nil, resultSizeEstimate: ms.count)
@@ -125,33 +129,28 @@ public class GMail {
 	- Parameter maxResults: Maximum number of messages to return
 	- Parameter pageToken: Page token to retrieve a specific page of results in the list
 	*/
-	public func list (includeSpamTrash: Bool = false, q: String? = nil, maxResults: UInt? = nil, pageToken: String? = nil) -> Promise<Messages> {
+	public func list (includeSpamTrash: Bool = false, q: String? = nil, maxResults: UInt? = nil, pageToken: String? = nil) -> EventLoopFuture<Messages> {
 		authRequest(on: url.appendingPathComponent("messages"),
 					body: MessagesQuery(includeSpamTrash: includeSpamTrash,
 										q: q,
 										maxResults: maxResults,
 										pageToken: pageToken),
-					method: "GET",
+					method: .GET,
 					scope: .mailRead + .mailFullAccess)
 	}
 	
-	public func profile () -> Promise<Profile> {
-		authRequest(on: self.url.appendingPathComponent("profile"), method: "GET", scope: .mailAll)
+	public func profile () -> EventLoopFuture<Profile> {
+		authRequest(on: self.url.appendingPathComponent("profile"), method: .GET, scope: .mailAll)
 	}
 	/// Make an authenticated request to the given URL
-	public func authRequest<E: Encodable, O: Decodable> (on url: URL, body: E, method: String, scope: GoogleScope) -> Promise<O> {
-		auth.authenticationHeaders(scope: scope)
-		.then(on: queue) { try url.httpRequest(headers: $0,
-											   body: body,
-											   method: method,
-											   errorType: ErrorResponse.self) }
+	public func authRequest<E: Encodable, O: Decodable> (on url: URL, body: E, method: HTTPMethod, scope: GoogleScope) -> EventLoopFuture<O> {
+		auth.authenticationHeader(scope: scope, client: client)
+		.flatMapThrowing { try self.client.execute(url: url, headers: [$0], body: body, method: method, errorType: ErrorResponse.self) }
 	}
 	/// Make an authenticated request to the given URL
-	public func authRequest<O: Decodable> (on url: URL, method: String, scope: GoogleScope) -> Promise<O> {
-		auth.authenticationHeaders(scope: scope)
-		.then(on: queue) { try url.httpRequest(headers: $0,
-											   method: method,
-											   errorType: ErrorResponse.self) }
+	public func authRequest<O: Decodable> (on url: URL, method: HTTPMethod, scope: GoogleScope) -> EventLoopFuture<O> {
+		auth.authenticationHeader(scope: scope, client: client)
+		.flatMapThrowing { try self.client.execute(url: url, headers: [$0], method: method, errorType: ErrorResponse.self) }
 	}
 	public enum MessageFormat: String, Codable {
 		/// Returns the full email message data with body content parsed in the payload field

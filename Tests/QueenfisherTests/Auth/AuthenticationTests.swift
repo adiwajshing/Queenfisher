@@ -1,5 +1,6 @@
 import XCTest
-import Promises
+import NIO
+import AsyncHTTPClient
 @testable import Queenfisher
 
 final class AuthenticationTests: XCTestCase {
@@ -8,9 +9,9 @@ final class AuthenticationTests: XCTestCase {
 	
 	var serviceAcc: GoogleServiceAccount!
 	var oauth: GoogleOAuthClient!
-	
+		
 	let queue: DispatchQueue = .global()
-	
+		
 	func testGoogleScope () {
 		var scope: GoogleScope = .sheets + .mailFullAccess + .calender
 		XCTAssertTrue(scope.contains(.sheets))
@@ -39,18 +40,17 @@ final class AuthenticationTests: XCTestCase {
 		print("login here and return code: ")
 		let code = readLine(strippingNewline: true)!
 		
-		XCTAssertNoThrow(
-			try await(
-				oauth.fetchToken(fromCode: code)
-				.then(on: queue) { print($0) }
-				.then(on: queue) { try JSONEncoder().encode($0).write(to: testApiKeyUrl) }
-			)
-		)
+		let future = oauth.fetchToken(fromCode: code, client: getHttpClient())
+			.map { (token) -> Void in
+				print(token)
+				//try! JSONEncoder().encode(token).write(to: testApiKeyUrl)
+			}
+		XCTAssertNoThrow(try future.wait())
 	}
 	func testServiceAccountAuth () {
 		loadServiceAccount()
 		if serviceAcc != nil {
-			XCTAssertNoThrow( try await(serviceAcc.fetchToken(for: .sheets + .mailFullAccess)) )
+			XCTAssertNoThrow( try serviceAcc.fetchToken(for: .sheets + .mailFullAccess, client: getHttpClient()).wait() )
 		}
 	}
 	func loadServiceAccount () {
