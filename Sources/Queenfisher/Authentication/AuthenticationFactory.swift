@@ -37,13 +37,11 @@ public class AuthenticationFactory: Authenticator {
 	}
 	public func authenticate(scope: GoogleScope, client: HTTPClient) -> EventLoopFuture<AccessToken> {
 		let ev = client.eventLoopGroup.next()
-		return ev.submit { [weak self] () throws -> EventLoopFuture<AccessToken> in
-			guard let self = self else {
-				throw NSError ()
-			}
+		return ev.submit { () throws -> EventLoopFuture<AccessToken> in
 			if !self.scope.containsAny(scope) {
 				throw GoogleAuthenticationError(error: "Cannot authenticate for given scope")
 			}
+			
 			if self.token == nil {
 				self.token = self.fetchToken(client: client)
 			}

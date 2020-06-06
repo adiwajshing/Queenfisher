@@ -1,1 +1,3 @@
 Tests/QueenfisherTests/Keys/*
+.build
+.vscode
