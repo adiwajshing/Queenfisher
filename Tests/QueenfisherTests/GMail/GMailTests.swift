@@ -7,7 +7,7 @@ final class GMailTests: XCTestCase {
 	var profile: GMail.Profile!
 	
 	override func setUp() {
-		let auth = AuthenticationTests.new().getFactory(for: .mailCompose + .mailRead + .mailModify)!
+		let auth = AuthenticationTests.gen().getFactory(for: .mailCompose + .mailRead + .mailModify)!
 		gmail = .init(auth: auth, client: getHttpClient())
 		XCTAssertNoThrow(profile = try gmail.profile().wait())
 	}

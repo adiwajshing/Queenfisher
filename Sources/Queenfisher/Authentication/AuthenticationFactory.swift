@@ -38,7 +38,7 @@ public class AuthenticationFactory: Authenticator {
 	public func authenticate(scope: GoogleScope, client: HTTPClient) -> EventLoopFuture<AccessToken> {
 		let ev = client.eventLoopGroup.next()
 		let promise = ev.makePromise(of: AccessToken.self)
-		queue.async { _ in
+		queue.async {
 			if !self.scope.containsAny(scope) {
 				promise.fail( GoogleAuthenticationError(error: "Cannot authenticate for given scope") )
 				return

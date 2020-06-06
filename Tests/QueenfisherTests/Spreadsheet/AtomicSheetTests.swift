@@ -10,7 +10,7 @@ final class AtomicSheetTests: XCTestCase {
 	let queue: DispatchQueue = .global()
 	
 	override func setUp() {
-		guard let auth = AuthenticationTests.new ().getFactory(for: .sheets) else {
+		guard let auth = AuthenticationTests.gen ().getFactory(for: .sheets) else {
 			XCTFail("Auth nil")
 			return
 		}

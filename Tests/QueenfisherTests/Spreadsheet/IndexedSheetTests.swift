@@ -11,7 +11,7 @@ final class IndexedSheetTests: XCTestCase {
 	let queue: DispatchQueue = .init(label: "serial", attributes: [])
 	
 	override func setUp() {
-		let auth = AuthenticationTests.new().getFactory(for: .sheets)!
+		let auth = AuthenticationTests.gen().getFactory(for: .sheets)!
 		sheet = .init(spreadsheetId: testSpreadsheetId,
 					  sheetTitle: sheetTitle,
 					  using: auth,

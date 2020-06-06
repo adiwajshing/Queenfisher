@@ -10,8 +10,8 @@ final class AuthenticationTests: XCTestCase {
 	var serviceAcc: GoogleServiceAccount!
 	var oauth: GoogleOAuthClient!
 
-	static func new () -> AuthenticationTests {
-		.init(name: "auth", testClosure: {_ in })
+	static func gen () -> AuthenticationTests {
+		.init()//.init(name: "auth", testClosure: {_ in })
 	}
 
 	func testGoogleScope () {
@@ -95,9 +95,4 @@ final class AuthenticationTests: XCTestCase {
 		AuthenticationTests.globalAuth = factory
 		return factory
 	}
-	static let allTests = [
-		("testGoogleScope", testGoogleScope),
-	//	("testOAuth", testOAuth),
-		("testServiceAccountAuth", testServiceAccountAuth)
-	]
 }

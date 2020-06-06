@@ -1,6 +1,8 @@
 import XCTest
+
 import QueenfisherTests
 
-var tests = allTests ()
+var tests = [XCTestCaseEntry]()
+tests += QueenfisherTests.__allTests()
 
 XCTMain(tests)
