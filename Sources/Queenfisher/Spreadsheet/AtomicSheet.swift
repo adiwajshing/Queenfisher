@@ -15,9 +15,9 @@ public class AtomicSheet: SheetInteractable {
 	public let authenticator: Authenticator?
 	public let sheetTitle: String
 	/// How long after an error should a re-upload be attempted
-	public var reuploadInterval: DispatchTimeInterval = .seconds(30)
+	public var reuploadInterval: TimeAmount = .seconds(30)
 	/// How long to wait after an operation before attempting an upload
-	public var uploadInterval: DispatchTimeInterval = .seconds(1)
+	public var uploadInterval: TimeAmount = .seconds(1)
 	
 	public weak var delegate: AtomicSheetDelegate?
 	private(set) public var isSheetLoaded = false
@@ -198,8 +198,11 @@ public class AtomicSheet: SheetInteractable {
 		operationQueue.append(op)
 	}
 	
-	func scheduleUpload (in time: DispatchTimeInterval) {
-		serialQueue.asyncAfter(deadline: .now() + time, execute: { _ = self.beginUpload() })
+	func scheduleUpload (in time: TimeAmount) {
+		_ = client.eventLoopGroup.next()
+		.scheduleTask(in: time, { })
+		.futureResult
+		.flatMap { self.beginUpload() }
 	}
 	func beginUpload () -> EventLoopFuture<Void> {
 		let promise = client.eventLoopGroup.next().makePromise(of: Void.self)

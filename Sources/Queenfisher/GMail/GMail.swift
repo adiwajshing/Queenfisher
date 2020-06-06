@@ -16,6 +16,7 @@ let gmailApiUrl = URL(string: "https://www.googleapis.com/gmail/v1/")!
 public class GMail {
 	public let auth: Authenticator
 	public let userId: String
+	public let client: HTTPClient
 	
 	var fetchTimer: DispatchSourceTimer!
 	var isFetching = false
@@ -23,7 +24,6 @@ public class GMail {
 	let serialQueue: DispatchQueue = .init(label: "serial-gmail", attributes: [])
 	internal(set) public var lastFetchDate = Date(timeIntervalSince1970: 0)
 	
-	let client: HTTPClient
 	lazy var url: URL = { gmailApiUrl.appendingPathComponent("users").appendingPathComponent(userId) }()
 	
 	public init (auth: Authenticator, email userId: String = "me", client: HTTPClient) {

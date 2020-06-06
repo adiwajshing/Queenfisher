@@ -37,26 +37,31 @@ public class AuthenticationFactory: Authenticator {
 	}
 	public func authenticate(scope: GoogleScope, client: HTTPClient) -> EventLoopFuture<AccessToken> {
 		let ev = client.eventLoopGroup.next()
-		return ev.submit { [weak self] () throws -> EventLoopFuture<AccessToken> in
+		let promise = ev.makePromise(of: AccessToken.self)
+		queue.async { [weak self] in
 			guard let self = self else {
-				throw NSError ()
+				promise.fail(NSError ())
+				return
 			}
 			if !self.scope.containsAny(scope) {
-				throw GoogleAuthenticationError(error: "Cannot authenticate for given scope")
+				promise.fail( GoogleAuthenticationError(error: "Cannot authenticate for given scope") )
+				return
 			}
 			if self.token == nil {
 				self.token = self.fetchToken(client: client)
 			}
-			return self.token!
-		}
-		.flatMap { $0 }
-		.flatMap { [weak self] key -> EventLoopFuture<AccessToken> in
-			if let self = self, key.isExpired {
-				self.token = self.fetchToken(client: client)
-				return self.token!
-			} else {
-				return ev.makeSucceededFuture(key)
+			let future = self.token!
+			.flatMap { [weak self] key -> EventLoopFuture<AccessToken> in
+				if let self = self, key.isExpired {
+					self.token = self.fetchToken(client: client)
+					return self.token!
+				} else {
+					return ev.makeSucceededFuture(key)
+				}
 			}
+			future.whenSuccess(promise.succeed)
+			future.whenFailure(promise.fail)
 		}
+		return promise.futureResult
 	}
 }
