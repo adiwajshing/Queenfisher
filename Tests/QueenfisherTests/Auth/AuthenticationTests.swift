@@ -9,9 +9,11 @@ final class AuthenticationTests: XCTestCase {
 	
 	var serviceAcc: GoogleServiceAccount!
 	var oauth: GoogleOAuthClient!
-		
-	let queue: DispatchQueue = .global()
-		
+
+	static func new () -> AuthenticationTests {
+		.init(name: "auth", testClosure: {_ in })
+	}
+
 	func testGoogleScope () {
 		var scope: GoogleScope = .sheets + .mailFullAccess + .calender
 		XCTAssertTrue(scope.contains(.sheets))
@@ -23,15 +25,20 @@ final class AuthenticationTests: XCTestCase {
 		XCTAssertTrue(scope.containsAny(.mailCompose + .storageRead))
 		
 		let encoder = JSONEncoder()
-		let data = try! encoder.encode(scope)
+		
+		//print (scope.rawValue)
+
+		var data = Data ()
+		XCTAssertNoThrow(data = try encoder.encode([scope])) 
 		
 		let decoder = JSONDecoder()
-		let scope2 = try! decoder.decode(GoogleScope.self, from: data)
+		var scope2: GoogleScope = .sheets
+		XCTAssertNoThrow(scope2 = try decoder.decode([GoogleScope].self, from: data)[0])
 		
 		XCTAssertEqual(scope, scope2)
 	}
 	
-	func testOAuth () {
+	func loadOAuth () {
 		loadOAuthClient()
 		guard let oauth = oauth else {
 			return
@@ -88,5 +95,9 @@ final class AuthenticationTests: XCTestCase {
 		AuthenticationTests.globalAuth = factory
 		return factory
 	}
-	
+	static let allTests = [
+		("testGoogleScope", testGoogleScope),
+	//	("testOAuth", testOAuth),
+		("testServiceAccountAuth", testServiceAccountAuth)
+	]
 }

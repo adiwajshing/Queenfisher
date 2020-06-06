@@ -9,9 +9,9 @@ import Foundation
 import AsyncHTTPClient
 
 /// url for attachments
-let testAttachmentsUrl = URL(fileURLWithPath: "/Users/adhirajsingh/Desktop/PROJECTS/XCode/Queenfisher/Tests/QueenfisherTests/TestAttachments")
+let testAttachmentsUrl = URL(fileURLWithPath: "./Tests/QueenfisherTests/TestAttachments")
 /// url for credentials folder
-let testUrl = URL(fileURLWithPath: "/Users/adhirajsingh/Desktop/PROJECTS/XCode/Queenfisher/Tests/QueenfisherTests/Keys")
+let testUrl = URL(fileURLWithPath: "./Tests/QueenfisherTests/Keys")
 
 /// file for test service account credentials
 let testCredsFileUrl = testUrl.appendingPathComponent("service_acc_creds.json")
