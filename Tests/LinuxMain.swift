@@ -1,7 +1,6 @@
 import XCTest
+import QueenfisherTests
 
-import SwiftSheetsTests
+var tests = allTests ()
 
-var tests = [XCTestCaseEntry]()
-tests += SwiftSheetsTests.allTests()
 XCTMain(tests)

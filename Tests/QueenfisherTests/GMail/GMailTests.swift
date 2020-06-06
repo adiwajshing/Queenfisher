@@ -5,10 +5,9 @@ import NIO
 final class GMailTests: XCTestCase {
 	var gmail: GMail!
 	var profile: GMail.Profile!
-	let auth = AuthenticationTests()
 	
 	override func setUp() {
-		let auth = AuthenticationTests().getFactory(for: .mailCompose + .mailRead + .mailModify)!
+		let auth = AuthenticationTests.new().getFactory(for: .mailCompose + .mailRead + .mailModify)!
 		gmail = .init(auth: auth, client: getHttpClient())
 		XCTAssertNoThrow(profile = try gmail.profile().wait())
 	}

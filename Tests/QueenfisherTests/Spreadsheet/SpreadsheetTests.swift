@@ -14,7 +14,7 @@ final class SpreadsheetTests: XCTestCase {
 	var sheet: Spreadsheet!
 	
 	override func setUp() {
-		let auth = AuthenticationTests().getFactory(for: .sheets)!
+		let auth = AuthenticationTests.new().getFactory(for: .sheets)!
 		XCTAssertNoThrow(sheet = try Spreadsheet.get(testSpreadsheetId, using: auth, client: getHttpClient()).wait())
 		createSheetIfRequired()
 	}

@@ -37,6 +37,12 @@ public struct GoogleScope: Codable, RawRepresentable, Equatable, CustomStringCon
 		let comps = rawValue.components(separatedBy: " ")
 		values = Set(comps.compactMap { URL(string: $0) })
 	}
+	public init (from decoder: Decoder) throws {
+		self.init(rawValue: try .init(from: decoder))!
+	}
+	public func encode(to encoder: Encoder) throws {
+		try rawValue.encode(to: encoder)
+	}
 	
 	public func contains (_ scope: Self) -> Bool {
 		scope.values.isSubset(of: values)
