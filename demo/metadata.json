@@ -3,6 +3,7 @@
     "content": ".",
     "sample": {
         "type": "code",
+        "language": "swift",
         "name": "sample.swift"
     }
 }
