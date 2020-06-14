@@ -1,9 +1,11 @@
 {
     "display_name": "Queenfisher",
     "content": [
-        "A pure-swift asynchronous wrapper around Google APIs, built for server use.",
+        "Because there was no Google API for swift, I built a pure-Swift wrapper around Google APIs.",
+        "It is built on Swift's codable & NIO, is fully asynchronous & is designed for server use.",
         "It can fetch, modify, send and reply to emails.",
-        "It can also create & modify Google Sheets and even has a custom API to allow the maintainence of a database on Google Sheets in O(logN) time"
+        "It can also create & modify Google Sheets.",
+        "Moreover, it has a custom API to allow for the maintainence of a database on Google Sheets in O(logN) time"
     ],
     "sample": {
         "type": "code",
