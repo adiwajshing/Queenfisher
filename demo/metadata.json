@@ -1,6 +1,10 @@
 {
     "display_name": "Queenfisher",
-    "content": ".",
+    "content": [
+        "A pure-swift asynchronous wrapper around Google APIs, built for server use.",
+        "It can fetch, modify, send and reply to emails.",
+        "It can also create & modify Google Sheets and even has a custom API to allow the maintainence of a database on Google Sheets in O(logN) time"
+    ],
     "sample": {
         "type": "code",
         "language": "swift",
