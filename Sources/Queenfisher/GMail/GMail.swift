@@ -152,6 +152,7 @@ public class GMail {
 		auth.authenticationHeader(scope: scope, client: client)
 		.flatMapThrowing { try self.client.execute(url: url, headers: [$0], method: method, errorType: ErrorResponse.self) }
 	}
+	
 	public enum MessageFormat: String, Codable {
 		/// Returns the full email message data with body content parsed in the payload field
 		case full = "full"

@@ -22,6 +22,8 @@ public class AtomicSheet: SheetInteractable {
 	public weak var delegate: AtomicSheetDelegate?
 	private(set) public var isSheetLoaded = false
 	
+	private var isShutdown = false
+	
 	private var sheetId: Int!
 	
 	private(set) public var end: Sheet.Location = .cell(0, 0)
@@ -61,6 +63,8 @@ public class AtomicSheet: SheetInteractable {
 		executeInPendingChain { self.operationQueue.count }
 	}
 	func executeInPendingChain <T> (_ block: @escaping () throws -> T) -> EventLoopFuture<T> {
+		if isShutdown { fatalError("operation called on shutdown sheet") }
+		
 		let promise = client.eventLoopGroup.next().makePromise(of: T.self)
 		serialQueue.async {
 			let op = self.pendingOperationChain
@@ -193,12 +197,20 @@ public class AtomicSheet: SheetInteractable {
 	public func clear () throws {
 		try operate(op: .clear(sheetId: sheetId)) { data.removeAll() }
 	}
+	public func shutdownSync () throws {
+		try executeInPendingChain({ self.isShutdown = true }).wait()
+	}
+	
 	func operate (op: Spreadsheet.Operation, _ exec: () throws -> Void) throws {
+		if isShutdown { fatalError("operation called on shut down sheet") }
 		try exec ()
 		operationQueue.append(op)
 	}
 	
 	func scheduleUpload (in time: TimeAmount) {
+		if isShutdown {
+			return
+		}
 		_ = client.eventLoopGroup.next()
 		.scheduleTask(in: time, { })
 		.futureResult
