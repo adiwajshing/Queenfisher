@@ -12,22 +12,23 @@ import AsyncHTTPClient
 let oAuthApiUrl = URL(string: "https://oauth2.googleapis.com/token")!
 
 public struct GoogleOAuthClient: Codable, AccessTokenFactory {
-	
-	public let clientId: String
-	public let clientSecret: String
-	public let redirectUris: [URL]
-	public let authUri: URL
-	
+	public struct Content: Codable {
+		public var clientId: String
+		public var clientSecret: String
+		public var redirectUris: [URL]
+		public var authUri: URL
+	}
+	public let web: Content
 	private var factoryToken: AccessToken?
 	
 	public func authUrl (for scope: GoogleScope, loginHint: String? = nil) -> URL {
-		var comps = URLComponents(url: authUri, resolvingAgainstBaseURL: false)!
+		var comps = URLComponents(url: web.authUri, resolvingAgainstBaseURL: false)!
 		var query: [URLQueryItem] = []
-		query.append(.init(name: "client_id", value: clientId))
+		query.append(.init(name: "client_id", value: web.clientId))
 		query.append(.init(name: "scope", value: scope.rawValue))
 		query.append(.init(name: "access_type", value: AccessType.offline.rawValue))
 		query.append(.init(name: "response_type", value: ResponseType.code.rawValue))
-		query.append(.init(name: "redirect_uri", value: redirectUris.first!.absoluteString))
+		query.append(.init(name: "redirect_uri", value: web.redirectUris.first!.absoluteString))
 		if let hint = loginHint {
 			query.append(.init(name: "login_hint", value: hint))
 		}
@@ -37,9 +38,9 @@ public struct GoogleOAuthClient: Codable, AccessTokenFactory {
 	public func fetchToken (fromCode code: String, client: HTTPClient) -> EventLoopFuture<AccessToken> {
 		let req: OAuthRequest = .init(code: code,
 									  refreshToken: nil,
-									  clientId: clientId,
-									  clientSecret: clientSecret,
-									  redirectUri: redirectUris.first!,
+									  clientId: web.clientId,
+									  clientSecret: web.clientSecret,
+									  redirectUri: web.redirectUris.first!,
 									  grantType: .authorizationCode)
 		return client.eventLoopGroup.next()
 			.submit { try client.execute(url: oAuthApiUrl,
@@ -58,9 +59,9 @@ public struct GoogleOAuthClient: Codable, AccessTokenFactory {
 			}
 			let req: OAuthRequest = .init(code: nil,
 										  refreshToken: factoryKeyToken,
-										  clientId: self.clientId,
-										  clientSecret: self.clientSecret,
-										  redirectUri: self.redirectUris.first!,
+										  clientId: self.web.clientId,
+										  clientSecret: self.web.clientSecret,
+										  redirectUri: self.web.redirectUris.first!,
 										  grantType: .refreshToken)
 			return try client.execute(url: oAuthApiUrl,
 									  headers: [],

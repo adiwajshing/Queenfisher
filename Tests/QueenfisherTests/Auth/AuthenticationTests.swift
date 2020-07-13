@@ -83,8 +83,8 @@ final class AuthenticationTests: XCTestCase {
 						AuthenticationTests.globalAuth = factory
 						return factory!
 					}					
-				} catch {
-					
+				} catch let error {
+					print ("error in getting OAuth client: \(error)")
 				}
 			}
 		}
