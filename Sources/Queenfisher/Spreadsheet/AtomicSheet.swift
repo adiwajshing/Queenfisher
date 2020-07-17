@@ -35,6 +35,8 @@ public class AtomicSheet: SheetInteractable {
 	private let onLoad: EventLoopPromise<Void>
 	private var pendingOperationChain: EventLoopFuture<Void>
 	
+	private var uploads: EventLoopFuture<Void>
+	
 	private let start: Sheet.Location = .cell(0, 0)
 	private let serialQueue: DispatchQueue = .init(label: "write_queue", attributes: [])
 	
@@ -50,11 +52,12 @@ public class AtomicSheet: SheetInteractable {
 		self.sheetTitle = sheetTitle
 		self.delegate = delegate
 		self.client = client
+		self.uploads = client.eventLoopGroup.next().makeSucceededFuture (())
 		
 		onLoad = client.eventLoopGroup.next().makePromise()
 		operationQueue = [.load()]
 		pendingOperationChain = onLoad.futureResult
-		_ = beginUpload()
+		uploads = beginUpload()
 	}
 	public func get () -> EventLoopFuture<[[String]]> {
 		executeInPendingChain { self.data }
@@ -198,7 +201,7 @@ public class AtomicSheet: SheetInteractable {
 		try operate(op: .clear(sheetId: sheetId)) { data.removeAll() }
 	}
 	public func shutdownSync () throws {
-		try executeInPendingChain({ self.isShutdown = true }).wait()
+		try executeInPendingChain({ self.isShutdown = true }).flatMap { self.uploads }.wait()
 	}
 	
 	func operate (op: Spreadsheet.Operation, _ exec: () throws -> Void) throws {
@@ -211,7 +214,7 @@ public class AtomicSheet: SheetInteractable {
 		if isShutdown {
 			return
 		}
-		_ = client.eventLoopGroup.next()
+		uploads = client.eventLoopGroup.next()
 		.scheduleTask(in: time, { })
 		.futureResult
 		.flatMap { self.beginUpload() }
