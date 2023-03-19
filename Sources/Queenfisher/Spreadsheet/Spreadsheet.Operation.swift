@@ -12,74 +12,74 @@ public extension Spreadsheet {
 	struct Operation: Codable {
 		
 		public struct SheetRange: Codable {
-			let sheetId: Int
-			let dimension: Sheet.Dimension?
-			let length: Int?
+			public let sheetId: Int
+			public let dimension: Sheet.Dimension?
+			public let length: Int?
 			
-			let startIndex: Int?
-			let endIndex: Int?
+			public let startIndex: Int?
+			public let endIndex: Int?
 		}
 		public struct GenericRequest: Codable {
-			var range: SheetRange
-			var fields: String? = nil
+			public var range: SheetRange
+			public var fields: String? = nil
 		}
 		public struct AddSheetRequest: Codable {
-			let properties: Sheet.Properties?
+			public let properties: Sheet.Properties?
 		}
 		public struct AppendCellsRequest: Codable {
-			let sheetId: Int
-			let rows: [Sheet.RowData]
-			let fields: String
+			public let sheetId: Int
+			public let rows: [Sheet.RowData]
+			public let fields: String
 		}
 		public struct UpdateCellsRequest: Codable {
 			public struct GridCoordinate: Codable {
-				let sheetId: Int
-				let rowIndex: Int?
-				let columnIndex: Int?
+				public let sheetId: Int
+				public let rowIndex: Int?
+				public let columnIndex: Int?
 			}
 			
-			let rows: [Sheet.RowData]?
-			let fields: String
-			let start: GridCoordinate?
-			let range: SheetRange?
+			public let rows: [Sheet.RowData]?
+			public let fields: String
+			public let start: GridCoordinate?
+			public let range: SheetRange?
 		}
 		public struct MoveCellsRequest: Codable {
 			public struct Source: Codable {
-				let sheetId: Int
-				let dimension: Sheet.Dimension
-				let startIndex: Int
-				let endIndex: Int
+				public let sheetId: Int
+				public let dimension: Sheet.Dimension
+				public let startIndex: Int
+				public let endIndex: Int
 			}
-			let source: Source
-			let destinationIndex: Int
+			public let source: Source
+			public let destinationIndex: Int
 		}
 		
 		public var load: Bool? = nil
-		var deleteDimension: GenericRequest? = nil
-		var appendDimension: SheetRange? = nil
-		var insertDimension: GenericRequest? = nil
-		var deleteSheet: SheetRange? = nil
-		var moveDimension: MoveCellsRequest? = nil
-		var addSheet: AddSheetRequest? = nil
-		var updateCells: UpdateCellsRequest? = nil
-		var appendCells: AppendCellsRequest? = nil
+		public var deleteDimension: GenericRequest? = nil
+		public var appendDimension: SheetRange? = nil
+		public var insertDimension: GenericRequest? = nil
+		public var deleteSheet: SheetRange? = nil
+		public var moveDimension: MoveCellsRequest? = nil
+		public var addSheet: AddSheetRequest? = nil
+		public var updateCells: UpdateCellsRequest? = nil
+		public var appendCells: AppendCellsRequest? = nil
 	}
 	/// A list of updates to perform on a spreadsheet
 	struct Operations: Codable {
-		let requests: [Operation]
+		public let requests: [Operation]
 		public init (requests: [Operation]) { self.requests = requests }
 		public init (_ op: Operation) { requests = [op] }
 	}
 	/// Response to a BatchUpdate
 	struct UpdateResponse: Codable {
-		let spreadsheetId: String
-		let replies: [Operation]
+		public let spreadsheetId: String
+		public let replies: [Operation]
 	}
 	/// Response to a write request
 	struct WriteResponse: Codable {
-		let updatedRange: String
-		let updatedRows: Int
-		let updatedColumns: Int
+		public let updatedRange: String
+		public let updatedRows: Int
+		public let updatedColumns: Int
 	}
 	
 }

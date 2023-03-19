@@ -10,41 +10,44 @@ import Foundation
 /// A single sheet in a Google Spreadsheet
 public struct Sheet: Codable {
 	
-	let properties: Properties
-	let data: [Sheet.Data]?
+    public let properties: Properties
+    public let data: [Sheet.Data]?
 	
-	
-	enum SheetType: String, Codable {
+    public enum SheetType: String, Codable {
 		case unspecified = "SHEET_TYPE_UNSPECIFIED"
 		case grid = "GRID"
 		case object = "OBJECT"
 	}
 	
 	public struct Properties: Codable {
+        
 		public struct Grid: Codable {
-			let rowCount: Int
-			let columnCount: Int
-			var frozenRowCount: Int? = nil
-			var frozenColumnCount: Int? = nil
+            public let rowCount: Int
+            public let columnCount: Int
+            public var frozenRowCount: Int? = nil
+            public var frozenColumnCount: Int? = nil
 		}
-		let title: String
+        
+        public let title: String
 		
-		var sheetId: Int? = nil
-		var index: Int? = nil
+        public var sheetId: Int? = nil
+        public var index: Int? = nil
 		
-		var sheetType: SheetType? = nil
-		var hidden: Bool? = nil
-		var rightToLeft: Bool? = nil
-		var gridProperties: Grid? = nil
+        public var sheetType: SheetType? = nil
+        public var hidden: Bool? = nil
+        public var rightToLeft: Bool? = nil
+        public var gridProperties: Grid? = nil
 	}
 	
 	public enum Dimension: String, Codable {
 		case rows = "ROWS"
 		case columns = "COLUMNS"
 	}
+    
 	public class ValuesRange: Codable {
-		let majorDimension: Dimension
-		let range: String
+        
+        public let majorDimension: Dimension
+        public let range: String
 		
 		public let values: [[String]]?
 		
@@ -65,13 +68,14 @@ public struct Sheet: Codable {
 		}
 	}
 	public struct CellData: Codable {
+        
 		public struct ExtendedValue: Codable {
-			var stringValue: String? = nil
-			var numberValue: Double? = nil
+            public var stringValue: String? = nil
+            public var numberValue: Double? = nil
 		}
-		var userEnteredValue: ExtendedValue? = nil
+        public var userEnteredValue: ExtendedValue? = nil
 		
-		func toString () -> String {
+        public func toString () -> String {
 			if let value = userEnteredValue?.stringValue {
 				return value
 			} else if let value = userEnteredValue?.numberValue {

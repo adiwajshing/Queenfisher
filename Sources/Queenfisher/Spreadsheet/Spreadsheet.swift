@@ -96,12 +96,12 @@ public class Spreadsheet: SheetInteractable, Decodable {
 	/// Properties of a spreadsheet
 	public struct Properties: Codable {
 		/// The title of the spreadsheet
-		let title: String
+		public let title: String
 		/// The locale of the spreadsheet
-		let locale: String
+		public let locale: String
 		/// The time zone of the spreadsheet, in CLDR format such as `America/New_York`.
 		/// If the time zone isn't recognized, this may be a custom time zone such as `GMT-07:00`
-		let timeZone: String
+        public let timeZone: String
 	}
 	
 	public enum CodingKeys: String, CodingKey {
